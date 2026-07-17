@@ -154,6 +154,12 @@ main { flex: 1; display: flex; min-height: 0; }
   transition: transform .2s, box-shadow .2s;
 }
 .pill-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 26px rgba(224, 80, 122, .46); }
+.pill-btn.ghost {
+  color: var(--pink-dark); background: rgba(255, 255, 255, .8);
+  box-shadow: 0 4px 14px rgba(178, 58, 96, .18);
+  border: 2px solid rgba(224, 80, 122, .35);
+}
+.pill-btn.ghost:hover { box-shadow: 0 8px 20px rgba(178, 58, 96, .24); background: #fff; }
 .round-btn {
   width: 46px; height: 46px; border-radius: 50%; cursor: pointer;
   border: 2px solid rgba(224, 80, 122, .5); background: rgba(255, 255, 255, .8);

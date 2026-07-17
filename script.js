@@ -119,14 +119,15 @@ async function cloudAdd(store, rec) {
   return saved;
 }
 
-function cloudPut(store, rec) {
+async function cloudPut(store, rec) {
   const patch = { caption: rec.caption };
   if (store === 'book') {
     patch.fit = rec.fit; patch.scale = rec.scale; patch.pos_x = rec.posX; patch.pos_y = rec.posY;
   } else {
     patch.x = rec.x; patch.y = rec.y; patch.w = rec.w; patch.rot = rec.rot; patch.z = rec.z;
   }
-  return sb.from(store).update(patch).eq('id', rec.id);
+  const { error } = await sb.from(store).update(patch).eq('id', rec.id);
+  if (error) toast('Could not save that change — check your connection');
 }
 
 async function cloudDelete(store, rec) {
@@ -472,6 +473,7 @@ const boardCanvas = $('#boardCanvas');
 const moreBelowBtn = $('#moreBelow');
 let boardItems = [];      // { id, kind:'image'|'video', caption, x, y, w, rot, z, storagePath, url }
 let boardMaxZ = 10;
+const boardItemEls = new Map();  // rec.id -> DOM element, for layout math (e.g. sorting)
 const CANVAS_PAD = 260;   // always leave this much open canvas below the lowest item
 
 function updateEmpty() {
@@ -538,6 +540,7 @@ function makeBoardItem(rec) {
     if (!confirm('Take this ' + (rec.kind === 'video' ? 'video' : 'picture') + ' off our wall?')) return;
     await cloudDelete('board', rec);
     boardItems = boardItems.filter((r) => r !== rec);
+    boardItemEls.delete(rec.id);
     item.remove();
     updateEmpty();
   });
@@ -616,7 +619,41 @@ function makeBoardItem(rec) {
   });
 
   boardCanvas.appendChild(item);
+  boardItemEls.set(rec.id, item);
   return item;
+}
+
+/* tidy every picture into a neat top-to-bottom, left-to-right flow, no more overlaps */
+function sortBoard() {
+  if (!boardItems.length) return;
+  const gap = 22;
+  const bw = board.clientWidth;
+  let x = gap, y = gap, rowH = 0;
+
+  for (const rec of boardItems) {
+    const item = boardItemEls.get(rec.id);
+    if (!item) continue;
+    if (x > gap && x + rec.w + gap > bw) {
+      x = gap;
+      y += rowH + gap;
+      rowH = 0;
+    }
+    rec.x = x;
+    rec.y = y;
+    rec.rot = 0;
+    item.style.left = x + 'px';
+    item.style.top = y + 'px';
+    item.style.setProperty('--rot', '0deg');
+    cloudPut('board', rec);
+    x += rec.w + gap;
+    rowH = Math.max(rowH, item.offsetHeight);
+  }
+
+  // tidying can shrink the used area a lot — unlike normal edits, let the canvas shrink to fit
+  boardCanvas.style.height = Math.max(board.clientHeight, y + rowH + CANVAS_PAD) + 'px';
+  updateMoreBelow();
+  board.scrollTo({ top: 0, behavior: 'smooth' });
+  toast('Tidied up ♥');
 }
 
 async function addBoardFiles(files) {
@@ -704,6 +741,7 @@ $('#addBookPhotos').addEventListener('click', () => $('#bookFile').click());
 $('#bookFile').addEventListener('change', (e) => { addBookFiles(e.target.files); e.target.value = ''; });
 $('#addBoardPhotos').addEventListener('click', () => $('#boardFile').click());
 $('#boardFile').addEventListener('change', (e) => { addBoardFiles(e.target.files); e.target.value = ''; });
+$('#sortBoard').addEventListener('click', sortBoard);
 
 /* ===================== loading + live sync ===================== */
 
@@ -716,6 +754,7 @@ async function loadBoard() {
   const recs = await cloudAll('board');
   boardCanvas.querySelectorAll('.polaroid').forEach((n) => n.remove());
   boardItems = [];
+  boardItemEls.clear();
   boardMaxZ = 10;
   const bw = board.clientWidth || window.innerWidth;
   for (const rec of recs) {
