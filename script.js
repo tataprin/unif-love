@@ -491,28 +491,34 @@ function updateEmpty() {
   $('#boardEmpty').style.display = boardItems.length ? 'none' : '';
 }
 
-/* how far down the lowest pinned item currently reaches */
-function measureLowestBottom() {
-  let bottom = 0;
+/* how far down/right the pinned items currently reach */
+function measureContentBounds() {
+  let bottom = 0, right = 0;
   boardCanvas.querySelectorAll('.polaroid').forEach((it) => {
     bottom = Math.max(bottom, it.offsetTop + it.offsetHeight);
+    right = Math.max(right, it.offsetLeft + it.offsetWidth);
   });
-  return bottom;
+  return { bottom, right };
 }
+function measureLowestBottom() { return measureContentBounds().bottom; }
 
 function updateMoreBelow() {
   const hidden = board.scrollHeight - board.clientHeight - board.scrollTop < 40;
   moreBelowBtn.classList.toggle('show', !hidden);
 }
 
-/* grow the canvas (never shrink) so there's always room to drop/drag things further down */
-function growCanvasTo(minPx) {
-  if (minPx > boardCanvas.offsetHeight) boardCanvas.style.height = minPx + 'px';
+/* grow the canvas (never shrink) so there's always room to drop/drag things further out.
+   pass either argument as null/omit to leave that dimension alone. */
+function growCanvasTo(minH, minW) {
+  if (!board.offsetParent) return;   // wall isn't visible right now (e.g. still on the book tab) — nothing to measure
+  if (minH != null && minH > boardCanvas.offsetHeight) boardCanvas.style.height = minH + 'px';
+  if (minW != null && minW > boardCanvas.offsetWidth) boardCanvas.style.width = minW + 'px';
   updateMoreBelow();
 }
 
 function refreshCanvasSize() {
-  growCanvasTo(Math.max(board.clientHeight, measureLowestBottom() + CANVAS_PAD));
+  const b = measureContentBounds();
+  growCanvasTo(Math.max(board.clientHeight, b.bottom + CANVAS_PAD), Math.max(board.clientWidth, b.right + CANVAS_PAD));
 }
 
 board.addEventListener('scroll', updateMoreBelow);
@@ -533,7 +539,7 @@ function makeBoardItem(rec) {
     media.controls = true;
     media.playsInline = true;
     media.preload = 'metadata';
-    media.addEventListener('loadedmetadata', () => growCanvasTo(rec.y + item.offsetHeight + CANVAS_PAD));
+    media.addEventListener('loadedmetadata', () => growCanvasTo(rec.y + item.offsetHeight + CANVAS_PAD, rec.x + item.offsetWidth + CANVAS_PAD));
   } else {
     media = el('img');
     media.src = rec.url;
@@ -571,11 +577,11 @@ function makeBoardItem(rec) {
     const sx = e.clientX, sy = e.clientY, ox = rec.x, oy = rec.y;
     item.setPointerCapture(e.pointerId);
     const move = (ev) => {
-      rec.x = ox + ev.clientX - sx;
-      rec.y = oy + ev.clientY - sy;
+      rec.x = Math.max(4, ox + ev.clientX - sx);
+      rec.y = Math.max(4, oy + ev.clientY - sy);
       item.style.left = rec.x + 'px';
       item.style.top = rec.y + 'px';
-      growCanvasTo(rec.y + item.offsetHeight + CANVAS_PAD);
+      growCanvasTo(rec.y + item.offsetHeight + CANVAS_PAD, rec.x + item.offsetWidth + CANVAS_PAD);
     };
     const up = () => {
       item.removeEventListener('pointermove', move);
@@ -601,7 +607,7 @@ function makeBoardItem(rec) {
       const d = Math.hypot(ev.clientX - cx, ev.clientY - cy);
       rec.w = Math.round(Math.min(640, Math.max(110, (w0 * d) / d0)));
       item.style.width = rec.w + 'px';
-      growCanvasTo(rec.y + item.offsetHeight + CANVAS_PAD);
+      growCanvasTo(rec.y + item.offsetHeight + CANVAS_PAD, rec.x + item.offsetWidth + CANVAS_PAD);
     };
     const up = () => { rez.removeEventListener('pointermove', move); cloudPut('board', rec); refreshCanvasSize(); };
     rez.addEventListener('pointermove', move);
@@ -660,10 +666,12 @@ function sortBoard() {
     rowH = Math.max(rowH, item.offsetHeight);
   }
 
-  // tidying can shrink the used area a lot — unlike normal edits, let the canvas shrink to fit
+  // tidying wraps everything back within view width and shrinks the used height to fit —
+  // unlike normal edits, let the canvas shrink back down instead of only ever growing
+  boardCanvas.style.width = '';
   boardCanvas.style.height = Math.max(board.clientHeight, y + rowH + CANVAS_PAD) + 'px';
   updateMoreBelow();
-  board.scrollTo({ top: 0, behavior: 'smooth' });
+  board.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
   toast('Tidied up ♥');
 }
 
@@ -729,6 +737,9 @@ document.querySelectorAll('.nav-btn').forEach((btn) => {
     document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('active', b === btn));
     document.querySelectorAll('.view').forEach((v) => v.classList.remove('active'));
     $('#view-' + btn.dataset.view).classList.add('active');
+    // the wall was likely hidden (display:none, zero size) when it first loaded its data,
+    // so its canvas size needs recomputing now that it actually has real layout dimensions
+    if (btn.dataset.view === 'board') refreshCanvasSize();
   });
 });
 
@@ -767,9 +778,8 @@ async function loadBoard() {
   boardItems = [];
   boardItemEls.clear();
   boardMaxZ = 10;
-  const bw = board.clientWidth || window.innerWidth;
   for (const rec of recs) {
-    rec.x = Math.max(4, Math.min(rec.x, bw - 70));       // keep pieces reachable if the window narrowed
+    rec.x = Math.max(4, rec.x);       // the wall now scrolls sideways, so no need to squeeze items into view
     rec.y = Math.max(4, rec.y);
     boardMaxZ = Math.max(boardMaxZ, rec.z || 0);
     boardItems.push(rec);

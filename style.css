@@ -140,7 +140,7 @@ nav { display: flex; gap: 8px; background: rgba(255, 255, 255, .55); padding: 5p
 
 /* ---------- layout ---------- */
 main { flex: 1; display: flex; min-height: 0; }
-.view { display: none; flex: 1; min-height: 0; }
+.view { display: none; flex: 1; min-height: 0; min-width: 0; }
 .view.active { display: flex; flex-direction: column; }
 .hint { text-align: center; font-size: 12.5px; opacity: .6; letter-spacing: .03em; }
 .view.drop { outline: 3px dashed var(--pink); outline-offset: -8px; border-radius: 20px; }
@@ -277,8 +277,8 @@ main { flex: 1; display: flex; min-height: 0; }
 .video-frame { background: #1d0f16; touch-action: auto; }
 .video-frame video { object-fit: contain; }
 .img-controls {
-  position: absolute; top: 10px; left: 10px; z-index: 2;
-  display: flex; gap: 6px;
+  position: absolute; top: 10px; left: 10px; right: 42px; z-index: 2;
+  display: flex; flex-wrap: wrap; gap: 6px;
   opacity: 0; transition: opacity .25s;
 }
 .photo-page:hover .img-controls { opacity: 1; }
@@ -313,24 +313,24 @@ main { flex: 1; display: flex; min-height: 0; }
   opacity: .4; font-style: italic;
 }
 
-.book-controls { display: flex; align-items: center; gap: 16px; }
+.book-controls { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; justify-content: center; }
 
 /* ---------- the wall ---------- */
 #view-board { padding: 6px 18px 18px; gap: 10px; }
 .board-bar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; justify-content: center; }
 #board {
-  flex: 1; position: relative; min-height: 0;
+  flex: 1; position: relative; min-height: 0; min-width: 0;
   border-radius: 18px;
   border: 1px solid rgba(224, 80, 122, .22);
   box-shadow: inset 0 2px 14px rgba(178, 58, 96, .08);
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: auto;
   scroll-behavior: smooth;
+  touch-action: pan-x pan-y;
 }
 #board.drop { outline: 3px dashed var(--pink); outline-offset: -10px; }
 #boardCanvas {
   position: relative;
-  width: 100%;
+  min-width: 100%;
   min-height: 100%;
   background-color: #fffdfb;
   background-image: radial-gradient(rgba(224, 80, 122, .14) 1.2px, transparent 1.4px);
@@ -423,6 +423,18 @@ main { flex: 1; display: flex; min-height: 0; }
   header { padding: 10px 14px; }
   .logo { font-size: 26px; }
   .nav-btn { padding: 8px 14px; font-size: 13px; }
-  .hint { font-size: 11px; }
+  .hint { font-size: 11px; padding: 0 8px; }
   .pill-btn { font-size: 13.5px; padding: 11px 18px; }
+  .round-btn { width: 40px; height: 40px; font-size: 22px; }
+
+  /* photo page controls are tight on a phone-width page — shrink and let them wrap */
+  .img-controls { top: 8px; left: 8px; right: 36px; gap: 4px; }
+  .img-ctrl { min-width: 22px; height: 22px; padding: 0 6px; font-size: 11px; }
+  .photo-del { top: 8px; right: 8px; width: 22px; height: 22px; font-size: 10px; }
+  .page-caption { font-size: 15px; min-height: 26px; }
+
+  .polaroid-caption { font-size: 16px; }
+  .p-del { width: 22px; height: 22px; font-size: 10px; }
+  .p-rotate { top: -28px; width: 20px; height: 20px; font-size: 11px; line-height: 17px; }
+  .p-resize { width: 17px; height: 17px; }
 }
