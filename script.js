@@ -80,6 +80,14 @@ function rowToRec(store, row) {
   return rec;
 }
 
+/* realtime echoes our own writes back to us — track them briefly so we don't
+   re-render (and visually "reload") something we just did ourselves */
+const locallyTouched = new Set();
+function markLocalTouch(id) {
+  locallyTouched.add(id);
+  setTimeout(() => locallyTouched.delete(id), 4000);
+}
+
 async function attachUrls(recs) {
   const paths = recs.map((r) => r.storagePath).filter(Boolean);
   if (!paths.length) return recs;
@@ -115,11 +123,13 @@ async function cloudAdd(store, rec) {
   if (error) { await sb.storage.from(BUCKET).remove([path]); throw error; }
 
   const saved = rowToRec(store, data);
+  markLocalTouch(saved.id);
   await attachUrls([saved]);
   return saved;
 }
 
 async function cloudPut(store, rec) {
+  markLocalTouch(rec.id);
   const patch = { caption: rec.caption };
   if (store === 'book') {
     patch.fit = rec.fit; patch.scale = rec.scale; patch.pos_x = rec.posX; patch.pos_y = rec.posY;
@@ -131,6 +141,7 @@ async function cloudPut(store, rec) {
 }
 
 async function cloudDelete(store, rec) {
+  markLocalTouch(rec.id);
   await sb.from(store).delete().eq('id', rec.id);
   if (rec.storagePath) await sb.storage.from(BUCKET).remove([rec.storagePath]);
 }
@@ -768,19 +779,70 @@ async function loadBoard() {
   refreshCanvasSize();
 }
 
-/* keep both devices in sync — any change either of you make refreshes the other's view */
+/* apply one wall change in place — no full rebuild, so an in-progress drag
+   elsewhere on the board is never disturbed */
+async function applyBoardChange(payload) {
+  if (payload.eventType === 'DELETE') {
+    const id = payload.old.id;
+    const item = boardItemEls.get(id);
+    if (item) item.remove();
+    boardItemEls.delete(id);
+    boardItems = boardItems.filter((r) => r.id !== id);
+    updateEmpty();
+    return;
+  }
+
+  const row = payload.new;
+  const existing = boardItems.find((r) => r.id === row.id);
+
+  if (existing) {
+    existing.caption = row.caption || '';
+    existing.x = Number(row.x);
+    existing.y = Number(row.y);
+    existing.w = Number(row.w);
+    existing.rot = Number(row.rot);
+    existing.z = Number(row.z);
+    boardMaxZ = Math.max(boardMaxZ, existing.z);
+
+    const item = boardItemEls.get(row.id);
+    if (item) {
+      item.style.left = existing.x + 'px';
+      item.style.top = existing.y + 'px';
+      item.style.width = existing.w + 'px';
+      item.style.zIndex = String(existing.z);
+      item.style.setProperty('--rot', existing.rot + 'deg');
+      const capEl = item.querySelector('.polaroid-caption');
+      if (capEl && document.activeElement !== capEl) capEl.textContent = existing.caption;
+    }
+    refreshCanvasSize();
+  } else {
+    const rec = rowToRec('board', row);
+    await attachUrls([rec]);
+    boardMaxZ = Math.max(boardMaxZ, rec.z || 0);
+    boardItems.push(rec);
+    makeBoardItem(rec);
+    updateEmpty();
+    refreshCanvasSize();
+  }
+}
+
+/* keep both devices in sync — any change either of you make reaches the other's view.
+   changes we just made ourselves are skipped so nothing visibly "reloads" underneath you */
 function setupRealtime() {
-  let bookTimer, boardTimer;
+  let bookTimer;
   sb.channel('book-sync')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'book' }, () => {
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'book' }, (payload) => {
+      const id = payload.new?.id || payload.old?.id;
+      if (id && locallyTouched.has(id)) return;
       clearTimeout(bookTimer);
       bookTimer = setTimeout(loadBook, 600);
     })
     .subscribe();
   sb.channel('board-sync')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'board' }, () => {
-      clearTimeout(boardTimer);
-      boardTimer = setTimeout(loadBoard, 600);
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'board' }, (payload) => {
+      const id = payload.new?.id || payload.old?.id;
+      if (id && locallyTouched.has(id)) return;
+      applyBoardChange(payload);
     })
     .subscribe();
 }
