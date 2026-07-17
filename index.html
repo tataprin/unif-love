@@ -10,6 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600;700&family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 </head>
 <body>
 
@@ -40,6 +41,7 @@
     <nav>
       <button class="nav-btn active" data-view="book">Our Book</button>
       <button class="nav-btn" data-view="board">Our Wall</button>
+      <button class="nav-btn" data-view="surprise">✨ Surprise</button>
     </nav>
   </header>
 
@@ -68,12 +70,32 @@
         <div id="boardEmpty" class="board-empty">this wall is waiting for our memories ♥</div>
       </div>
     </section>
+
+    <section id="view-surprise" class="view">
+      <div class="room-scene" id="roomScene">
+        <canvas id="roomCanvas"></canvas>
+        <div id="roomLoading" class="room-loading">setting the table…</div>
+        <div id="cardOverlay" class="card-overlay hidden">
+          <div class="opened-card">
+            <div id="cardMessage" class="card-message" contenteditable="true" data-placeholder="write your message…"></div>
+            <div class="card-buttons">
+              <button id="yesBtn" class="card-yes">Yes ♥</button>
+            </div>
+            <button id="noBtn" class="card-no">No</button>
+          </div>
+        </div>
+      </div>
+      <p class="hint">tap the card on the table ♥</p>
+    </section>
   </main>
+
+  <canvas id="fxCanvas"></canvas>
 
   <input type="file" id="bookFile" accept="image/*,video/*" multiple hidden>
   <input type="file" id="boardFile" accept="image/*,video/*" multiple hidden>
   <div id="toast" role="status"></div>
 
   <script src="script.js"></script>
+  <script src="room.js"></script>
 </body>
 </html>

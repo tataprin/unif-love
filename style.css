@@ -407,11 +407,86 @@ main { flex: 1; display: flex; min-height: 0; }
 }
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+/* ---------- the surprise (3D room) ---------- */
+#view-surprise { align-items: center; gap: 10px; padding: 10px 16px 18px; }
+.room-scene {
+  position: relative; flex: 1; width: 100%; min-height: 0;
+  border-radius: 20px; overflow: hidden;
+  background: linear-gradient(180deg, #f8d9e3 0%, #fdece7 60%, #fff3ea 100%);
+  box-shadow: inset 0 2px 18px rgba(178, 58, 96, .12);
+}
+#roomCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: pointer; }
+.room-loading {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-family: var(--script); font-size: clamp(20px, 4vw, 28px);
+  color: var(--rose-deep); background: inherit;
+  transition: opacity .5s ease, visibility .5s ease;
+}
+.room-loading.hidden { opacity: 0; visibility: hidden; }
+
+.card-overlay {
+  position: absolute; inset: 0; z-index: 5;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(90, 30, 50, .28); backdrop-filter: blur(3px);
+  opacity: 1; transition: opacity .4s ease, visibility .4s ease;
+}
+.card-overlay.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+
+.opened-card {
+  position: relative;
+  width: min(420px, 86%); min-height: 260px;
+  padding: 34px 28px 26px;
+  border-radius: 18px;
+  background:
+    radial-gradient(120px 90px at 15% 0%, rgba(224, 80, 122, .1), transparent 70%),
+    var(--paper);
+  box-shadow: 0 24px 60px rgba(90, 20, 45, .35);
+  display: flex; flex-direction: column; align-items: center; gap: 24px;
+  animation: card-pop .45s cubic-bezier(.2, .9, .3, 1.3);
+}
+@keyframes card-pop {
+  0% { transform: scale(.7) translateY(20px); opacity: 0; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+.opened-card::before {
+  content: '♥'; position: absolute; top: -20px; left: 50%; transform: translateX(-50%);
+  font-size: 28px; color: var(--pink); text-shadow: 0 4px 14px rgba(224, 80, 122, .5);
+}
+.card-message {
+  width: 100%; min-height: 70px;
+  font-family: var(--script); font-size: clamp(20px, 4vw, 26px); line-height: 1.5;
+  text-align: center; color: var(--rose-deep);
+  outline: none; cursor: text;
+}
+.card-buttons { width: 100%; min-height: 56px; display: flex; align-items: center; justify-content: center; }
+.card-yes, .card-no {
+  font-family: inherit; font-weight: 700; font-size: 16px;
+  padding: 13px 30px; border: none; border-radius: 999px; cursor: pointer;
+  transition: transform .15s ease, box-shadow .15s ease;
+  white-space: nowrap;
+}
+.card-yes {
+  color: #fff; background: linear-gradient(135deg, #ef6a92, var(--pink-dark));
+  box-shadow: 0 10px 24px rgba(224, 80, 122, .45);
+}
+.card-yes:hover { transform: translateY(-2px) scale(1.04); }
+.card-no {
+  position: absolute; z-index: 3;
+  color: var(--pink-dark); background: #fff; border: 2px solid rgba(224, 80, 122, .3);
+  transition: left .18s ease, top .18s ease, transform .15s ease;
+}
+
+#fxCanvas {
+  position: fixed; inset: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 500;
+}
+
 /* ---------- small screens ---------- */
 @media (max-width: 560px) {
-  header { padding: 10px 14px; }
+  header { padding: 10px 14px; flex-wrap: wrap; justify-content: center; gap: 8px; }
   .logo { font-size: 26px; }
-  .nav-btn { padding: 8px 14px; font-size: 13px; }
+  nav { gap: 4px; padding: 4px; }
+  .nav-btn { padding: 7px 11px; font-size: 12px; white-space: nowrap; }
   .hint { font-size: 11px; padding: 0 8px; }
   .pill-btn { font-size: 13.5px; padding: 11px 18px; }
   .round-btn { width: 40px; height: 40px; font-size: 22px; }
@@ -426,4 +501,8 @@ main { flex: 1; display: flex; min-height: 0; }
   .p-del { width: 22px; height: 22px; font-size: 10px; }
   .p-rotate { top: -28px; width: 20px; height: 20px; font-size: 11px; line-height: 17px; }
   .p-resize { width: 17px; height: 17px; }
+
+  .opened-card { padding: 26px 18px 20px; gap: 18px; min-height: 220px; }
+  .card-message { font-size: 18px; min-height: 56px; }
+  .card-yes, .card-no { padding: 11px 22px; font-size: 14px; }
 }
