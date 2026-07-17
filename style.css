@@ -342,17 +342,6 @@ main { flex: 1; display: flex; min-height: 0; }
   font-family: var(--script); font-size: clamp(22px, 4vw, 34px);
   color: rgba(178, 58, 96, .4); pointer-events: none; text-align: center; padding: 20px;
 }
-.more-below {
-  position: absolute; bottom: 14px; right: 14px; z-index: 999;
-  font-family: inherit; font-weight: 700; font-size: 13px;
-  padding: 9px 18px; border: none; border-radius: 999px; cursor: pointer;
-  color: #fff; background: linear-gradient(135deg, #ef6a92, var(--pink-dark));
-  box-shadow: 0 8px 18px rgba(224, 80, 122, .4);
-  opacity: 0; visibility: hidden; transform: translateY(6px);
-  transition: opacity .3s, transform .3s, visibility .3s;
-}
-.more-below.show { opacity: 1; visibility: visible; transform: translateY(0); }
-
 .polaroid {
   position: absolute;
   background: #fff;

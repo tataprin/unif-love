@@ -481,7 +481,6 @@ $('#prevBtn').addEventListener('click', flipPrev);
 
 const board = $('#board');
 const boardCanvas = $('#boardCanvas');
-const moreBelowBtn = $('#moreBelow');
 let boardItems = [];      // { id, kind:'image'|'video', caption, x, y, w, rot, z, storagePath, url }
 let boardMaxZ = 10;
 const boardItemEls = new Map();  // rec.id -> DOM element, for layout math (e.g. sorting)
@@ -502,27 +501,18 @@ function measureContentBounds() {
 }
 function measureLowestBottom() { return measureContentBounds().bottom; }
 
-function updateMoreBelow() {
-  const hidden = board.scrollHeight - board.clientHeight - board.scrollTop < 40;
-  moreBelowBtn.classList.toggle('show', !hidden);
-}
-
 /* grow the canvas (never shrink) so there's always room to drop/drag things further out.
    pass either argument as null/omit to leave that dimension alone. */
 function growCanvasTo(minH, minW) {
   if (!board.offsetParent) return;   // wall isn't visible right now (e.g. still on the book tab) — nothing to measure
   if (minH != null && minH > boardCanvas.offsetHeight) boardCanvas.style.height = minH + 'px';
   if (minW != null && minW > boardCanvas.offsetWidth) boardCanvas.style.width = minW + 'px';
-  updateMoreBelow();
 }
 
 function refreshCanvasSize() {
   const b = measureContentBounds();
   growCanvasTo(Math.max(board.clientHeight, b.bottom + CANVAS_PAD), Math.max(board.clientWidth, b.right + CANVAS_PAD));
 }
-
-board.addEventListener('scroll', updateMoreBelow);
-moreBelowBtn.addEventListener('click', () => board.scrollTo({ top: boardCanvas.offsetHeight, behavior: 'smooth' }));
 
 function makeBoardItem(rec) {
   const item = el('div', 'polaroid' + (rec.kind === 'video' ? ' polaroid-video' : ''));
@@ -670,7 +660,6 @@ function sortBoard() {
   // unlike normal edits, let the canvas shrink back down instead of only ever growing
   boardCanvas.style.width = '';
   boardCanvas.style.height = Math.max(board.clientHeight, y + rowH + CANVAS_PAD) + 'px';
-  updateMoreBelow();
   board.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
   toast('Tidied up ♥');
 }
