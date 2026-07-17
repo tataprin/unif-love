@@ -1,0 +1,788 @@
+'use strict';
+
+/* ===================== tiny helpers ===================== */
+
+const $ = (sel) => document.querySelector(sel);
+
+function el(tag, cls, html) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (html !== undefined) n.innerHTML = html;
+  return n;
+}
+
+let toastTimer;
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3400);
+}
+
+function loadImage(url) {
+  return new Promise((res, rej) => {
+    const im = new Image();
+    im.onload = () => res(im);
+    im.onerror = () => rej(new Error('bad image'));
+    im.src = url;
+  });
+}
+
+/* Shrink big photos so they upload fast and flip smoothly. */
+async function shrink(file, maxDim = 1600, quality = 0.85) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await loadImage(url);
+    const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.max(1, Math.round(img.naturalWidth * scale));
+    const h = Math.max(1, Math.round(img.naturalHeight * scale));
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    c.getContext('2d').drawImage(img, 0, 0, w, h);
+    const blob = await new Promise((res) => c.toBlob(res, 'image/jpeg', quality));
+    return blob || file;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/* ===================== cloud storage (Supabase) ===================== */
+
+const SUPABASE_URL = 'https://cipxuiszpafwhgnyprzj.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNpcHh1aXN6cGFmd2hnbnlwcnpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQzMTExNTQsImV4cCI6MjA5OTg4NzE1NH0.tHvJjo0hRBoxg03Qckmme2T4L9AzfSf7aFEhmWJ_p0o';
+const SHARED_EMAIL = 'hello@unif.love';
+const BUCKET = 'memories';
+const SIGNED_URL_TTL = 6 * 60 * 60; // 6 hours — long enough for a normal visit
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+function rowToRec(store, row) {
+  const rec = {
+    id: row.id,
+    kind: row.kind,
+    caption: row.caption || '',
+    storagePath: row.storage_path,
+    contentType: row.content_type,
+  };
+  if (store === 'book') {
+    rec.fit = row.fit || 'cover';
+    rec.scale = Number(row.scale) || 1;
+    rec.posX = Number(row.pos_x);
+    rec.posY = Number(row.pos_y);
+  } else {
+    rec.x = Number(row.x);
+    rec.y = Number(row.y);
+    rec.w = Number(row.w);
+    rec.rot = Number(row.rot);
+    rec.z = Number(row.z);
+  }
+  return rec;
+}
+
+async function attachUrls(recs) {
+  const paths = recs.map((r) => r.storagePath).filter(Boolean);
+  if (!paths.length) return recs;
+  const { data, error } = await sb.storage.from(BUCKET).createSignedUrls(paths, SIGNED_URL_TTL);
+  if (error) { toast('Could not load pictures — check your connection'); return recs; }
+  const byPath = new Map(data.map((d) => [d.path, d]));
+  for (const rec of recs) {
+    const d = byPath.get(rec.storagePath);
+    if (d && !d.error) rec.url = d.signedUrl;
+  }
+  return recs;
+}
+
+async function cloudAdd(store, rec) {
+  const blob = rec.blob;
+  const path = store + '/' + crypto.randomUUID();
+  const { error: upErr } = await sb.storage.from(BUCKET).upload(path, blob, {
+    contentType: blob.type || 'application/octet-stream',
+  });
+  if (upErr) throw upErr;
+
+  const payload = { kind: rec.kind, caption: rec.caption || '', storage_path: path, content_type: blob.type || null };
+  if (store === 'book') {
+    payload.fit = rec.fit || 'cover';
+    payload.scale = rec.scale || 1;
+    payload.pos_x = rec.posX ?? 50;
+    payload.pos_y = rec.posY ?? 50;
+  } else {
+    payload.x = rec.x; payload.y = rec.y; payload.w = rec.w; payload.rot = rec.rot; payload.z = rec.z;
+  }
+
+  const { data, error } = await sb.from(store).insert(payload).select().single();
+  if (error) { await sb.storage.from(BUCKET).remove([path]); throw error; }
+
+  const saved = rowToRec(store, data);
+  await attachUrls([saved]);
+  return saved;
+}
+
+function cloudPut(store, rec) {
+  const patch = { caption: rec.caption };
+  if (store === 'book') {
+    patch.fit = rec.fit; patch.scale = rec.scale; patch.pos_x = rec.posX; patch.pos_y = rec.posY;
+  } else {
+    patch.x = rec.x; patch.y = rec.y; patch.w = rec.w; patch.rot = rec.rot; patch.z = rec.z;
+  }
+  return sb.from(store).update(patch).eq('id', rec.id);
+}
+
+async function cloudDelete(store, rec) {
+  await sb.from(store).delete().eq('id', rec.id);
+  if (rec.storagePath) await sb.storage.from(BUCKET).remove([rec.storagePath]);
+}
+
+async function cloudAll(store) {
+  const { data, error } = await sb.from(store).select('*').order('created_at', { ascending: true });
+  if (error) { toast('Could not load — check your connection'); return []; }
+  const recs = data.map((row) => rowToRec(store, row));
+  await attachUrls(recs);
+  return recs;
+}
+
+/* ===================== the 3D book ===================== */
+
+const bookEl = $('#book');
+let bookPhotos = [];      // { id, kind:'image'|'video', caption, fit, scale, posX, posY, storagePath, url }
+let sheetEls = [];
+let flipCount = 0;
+let animCounter = 0;
+const animating = new Set();
+
+function makeCaption(rec, store, cls, placeholder) {
+  const cap = el('div', cls);
+  cap.contentEditable = 'true';
+  cap.dataset.placeholder = placeholder;
+  cap.spellcheck = false;
+  cap.textContent = rec.caption || '';
+  cap.addEventListener('click', (e) => e.stopPropagation());
+  cap.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); cap.blur(); } });
+  cap.addEventListener('blur', () => {
+    const text = cap.textContent.trim();
+    if (text !== (rec.caption || '')) { rec.caption = text; cloudPut(store, rec); }
+  });
+  return cap;
+}
+
+function pageNode(def, side) {
+  const p = el('div', 'page ' + side);
+
+  if (def.type === 'cover') {
+    p.classList.add('cover');
+    p.innerHTML =
+      '<div class="cover-inner">' +
+      '<div class="cover-top">our story</div>' +
+      '<div class="cover-name">Unif</div>' +
+      '<div class="cover-heart">♥</div>' +
+      '<div class="cover-bottom">made with love · always</div>' +
+      '</div>';
+
+  } else if (def.type === 'backcover') {
+    p.classList.add('backcover');
+    p.innerHTML =
+      '<div class="backcover-inner">' +
+      '<div class="big">The End?</div>' +
+      '<div class="big">never ♥</div>' +
+      '<div class="small">— to be continued, forever —</div>' +
+      '</div>';
+
+  } else if (def.type === 'text') {
+    p.classList.add('text-page');
+    p.appendChild(el('div', 'page-text', def.html));
+
+  } else if (def.type === 'video') {
+    p.classList.add('photo-page');
+    const video = def.photo;
+    const frame = el('div', 'photo-frame video-frame');
+    const vid = el('video');
+    vid.src = video.url;
+    vid.controls = true;
+    vid.playsInline = true;
+    vid.preload = 'metadata';
+    frame.appendChild(vid);
+
+    const del = el('button', 'photo-del', '✕');
+    del.title = 'Remove this video';
+    del.addEventListener('click', (e) => { e.stopPropagation(); removeBookPhoto(video); });
+    frame.appendChild(del);
+
+    p.appendChild(frame);
+    p.appendChild(makeCaption(video, 'book', 'page-caption', 'write a caption…'));
+
+  } else {                                          // photo page
+    p.classList.add('photo-page');
+    const photo = def.photo;
+    photo.fit = photo.fit || 'cover';
+    photo.scale = photo.scale || 1;
+    photo.posX = photo.posX ?? 50;
+    photo.posY = photo.posY ?? 50;
+
+    const frame = el('div', 'photo-frame');
+    const img = el('img');
+    img.src = photo.url;
+    img.alt = '';
+    img.draggable = false;
+    frame.appendChild(img);
+
+    function applyImgStyle() {
+      frame.classList.toggle('contain', photo.fit === 'contain');
+      if (photo.fit === 'contain') {
+        img.style.transform = '';
+        img.style.objectPosition = '';
+      } else {
+        img.style.transformOrigin = photo.posX + '% ' + photo.posY + '%';
+        img.style.objectPosition = photo.posX + '% ' + photo.posY + '%';
+        img.style.transform = 'scale(' + photo.scale + ')';
+      }
+    }
+    applyImgStyle();
+
+    function setScale(s) {
+      photo.scale = Math.max(1, Math.min(3, Math.round(s * 100) / 100));
+      applyImgStyle();
+      cloudPut('book', photo);
+    }
+
+    const ctrls = el('div', 'img-controls');
+    const fitBtn = el('button', 'img-ctrl', photo.fit === 'contain' ? '⤢ Fill' : '⤡ Fit');
+    fitBtn.title = 'Fill = crop to frame · Fit = show the whole image';
+    fitBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      photo.fit = photo.fit === 'contain' ? 'cover' : 'contain';
+      fitBtn.textContent = photo.fit === 'contain' ? '⤢ Fill' : '⤡ Fit';
+      applyImgStyle();
+      cloudPut('book', photo);
+    });
+    const zoomOut = el('button', 'img-ctrl', '−');
+    zoomOut.title = 'Zoom out';
+    zoomOut.addEventListener('click', (e) => { e.stopPropagation(); setScale(photo.scale - 0.2); });
+    const zoomIn = el('button', 'img-ctrl', '+');
+    zoomIn.title = 'Zoom in';
+    zoomIn.addEventListener('click', (e) => { e.stopPropagation(); setScale(photo.scale + 0.2); });
+    const resetBtn = el('button', 'img-ctrl', '⟳');
+    resetBtn.title = 'Reset position & zoom';
+    resetBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      photo.scale = 1; photo.posX = 50; photo.posY = 50;
+      applyImgStyle();
+      cloudPut('book', photo);
+    });
+    ctrls.append(fitBtn, zoomOut, zoomIn, resetBtn);
+    frame.appendChild(ctrls);
+
+    /* drag on the photo to reposition which part shows (only matters in Fill mode) */
+    let moved = false;
+    frame.addEventListener('pointerdown', (e) => {
+      if (photo.fit === 'contain' || e.target.closest('.img-controls, .photo-del')) return;
+      frame.setPointerCapture(e.pointerId);
+      const r = frame.getBoundingClientRect();
+      const sx = e.clientX, sy = e.clientY, ox = photo.posX, oy = photo.posY;
+      moved = false;
+      const move = (ev) => {
+        const dx = ev.clientX - sx, dy = ev.clientY - sy;
+        if (!moved && Math.hypot(dx, dy) > 3) { moved = true; frame.classList.add('panning'); }
+        if (!moved) return;
+        photo.posX = Math.max(0, Math.min(100, ox - (dx / r.width) * 100 / photo.scale));
+        photo.posY = Math.max(0, Math.min(100, oy - (dy / r.height) * 100 / photo.scale));
+        applyImgStyle();
+      };
+      const up = () => {
+        frame.removeEventListener('pointermove', move);
+        frame.classList.remove('panning');
+        if (moved) cloudPut('book', photo);
+      };
+      frame.addEventListener('pointermove', move);
+      frame.addEventListener('pointerup', up, { once: true });
+      frame.addEventListener('pointercancel', up, { once: true });
+    });
+    frame.addEventListener('click', (e) => { if (moved) { e.stopPropagation(); moved = false; } });
+    frame.addEventListener('wheel', (e) => {
+      if (photo.fit === 'contain') return;
+      e.preventDefault();
+      setScale(photo.scale - e.deltaY * 0.0015);
+    }, { passive: false });
+
+    const del = el('button', 'photo-del', '✕');
+    del.title = 'Remove this photo';
+    del.addEventListener('click', (e) => { e.stopPropagation(); removeBookPhoto(photo); });
+    frame.appendChild(del);
+
+    p.appendChild(frame);
+    p.appendChild(makeCaption(photo, 'book', 'page-caption', 'write a caption…'));
+  }
+  return p;
+}
+
+function buildBook() {
+  bookEl.innerHTML = '';
+
+  const pages = [
+    { type: 'cover' },
+    { type: 'text', html: 'For <b>Unif</b> —<br>every page of this book<br>is a piece of my heart.<br><span class="sig">I love you ♥</span>' },
+  ];
+  if (bookPhotos.length === 0) {
+    pages.push({ type: 'text', html: 'Our book is waiting<br>for its first memory…<br><br>tap <b>“+ Add photos &amp; videos”</b> below<br>and fill these pages with us ♥' });
+  } else {
+    for (const ph of bookPhotos) pages.push({ type: ph.kind === 'video' ? 'video' : 'photo', photo: ph });
+  }
+  if (pages.length % 2 === 0) {
+    pages.push({ type: 'text', html: '…and we are still writing<br>our story ♥' });
+  }
+  pages.push({ type: 'backcover' });
+
+  const N = pages.length / 2;
+  sheetEls = [];
+  animating.clear();
+
+  for (let i = 0; i < N; i++) {
+    const sheet = el('div', 'sheet');
+    sheet.appendChild(pageNode(pages[2 * i], 'front'));
+    sheet.appendChild(pageNode(pages[2 * i + 1], 'back'));
+    sheet.addEventListener('transitionend', (e) => {
+      if (e.target !== sheet || e.propertyName !== 'transform') return;
+      animating.delete(sheet);
+      applyZ();
+    });
+    bookEl.appendChild(sheet);
+    sheetEls.push(sheet);
+  }
+
+  flipCount = Math.max(0, Math.min(flipCount, N));
+  applyFlips();
+}
+
+function applyZ() {
+  const N = sheetEls.length;
+  sheetEls.forEach((s, i) => {
+    if (animating.has(s)) return;
+    s.style.zIndex = String(s.classList.contains('flipped') ? i + 1 : N - i);
+  });
+}
+
+function applyFlips() {
+  const N = sheetEls.length;
+  sheetEls.forEach((s, i) => s.classList.toggle('flipped', i < flipCount));
+  bookEl.classList.toggle('closed', flipCount === 0);
+  bookEl.classList.toggle('finished', N > 0 && flipCount === N);
+  applyZ();
+  $('#prevBtn').disabled = flipCount === 0;
+  $('#nextBtn').disabled = flipCount === N;
+}
+
+/* Keep a turning sheet above everything while it moves. */
+function boost(sheet) {
+  animating.add(sheet);
+  sheet.style.zIndex = String(2 * sheetEls.length + (++animCounter));
+  setTimeout(() => {
+    if (animating.has(sheet)) { animating.delete(sheet); applyZ(); }
+  }, 1500);
+}
+
+function flipNext() {
+  if (flipCount >= sheetEls.length) return;
+  boost(sheetEls[flipCount]);
+  flipCount++;
+  applyFlips();
+}
+
+function flipPrev() {
+  if (flipCount <= 0) return;
+  flipCount--;
+  boost(sheetEls[flipCount]);
+  applyFlips();
+}
+
+function flipTo(target) {
+  target = Math.max(0, Math.min(target, sheetEls.length));
+  if (target === flipCount) return;
+  if (target > flipCount) for (let i = flipCount; i < target; i++) boost(sheetEls[i]);
+  else for (let i = flipCount - 1; i >= target; i--) boost(sheetEls[i]);
+  flipCount = target;
+  applyFlips();
+}
+
+async function removeBookPhoto(photo) {
+  const label = photo.kind === 'video' ? 'video' : 'photo';
+  if (!confirm('Remove this ' + label + ' from our book?')) return;
+  await cloudDelete('book', photo);
+  bookPhotos = bookPhotos.filter((p) => p !== photo);
+  buildBook();
+  toast(label[0].toUpperCase() + label.slice(1) + ' removed');
+}
+
+const MAX_VIDEO_BYTES = 100 * 1024 * 1024; // matches the storage bucket's per-file limit
+
+async function addBookFiles(files) {
+  const list = [...files].filter((f) => f.type.startsWith('image/') || f.type.startsWith('video/'));
+  if (!list.length) return;
+  const firstNew = bookPhotos.length;
+  let added = 0, tooBig = 0;
+  toast(list.length === 1 ? 'Uploading…' : 'Uploading ' + list.length + '…');
+
+  for (const f of list) {
+    try {
+      if (f.type.startsWith('video/')) {
+        if (f.size > MAX_VIDEO_BYTES) { tooBig++; continue; }
+        const rec = await cloudAdd('book', { kind: 'video', blob: f, caption: '' });
+        bookPhotos.push(rec);
+      } else {
+        const blob = await shrink(f);
+        const rec = await cloudAdd('book', { kind: 'image', blob, caption: '', fit: 'cover', scale: 1, posX: 50, posY: 50 });
+        bookPhotos.push(rec);
+      }
+      added++;
+    } catch (e) {
+      toast('Couldn’t add “' + f.name + '” — check your connection and try again');
+    }
+  }
+  if (tooBig) toast(tooBig === 1 ? 'A video was over 100MB, so it was skipped' : tooBig + ' videos were over 100MB, so they were skipped');
+  if (!added) return;
+
+  buildBook();
+  // flip to the first newly added item (cover=page 0, dedication=page 1, memories start at page 2)
+  const pageIdx = 2 + firstNew;
+  requestAnimationFrame(() => flipTo(Math.ceil(pageIdx / 2)));
+  toast(added === 1 ? 'Added 1 memory to our book ♥' : 'Added ' + added + ' memories to our book ♥');
+}
+
+/* click left half = back, right half = forward */
+$('#scene').addEventListener('click', (e) => {
+  if (e.target.closest('.page-caption, .photo-del, .img-controls, video')) return;
+  const r = bookEl.getBoundingClientRect();
+  if (e.clientX >= r.left + r.width / 2) flipNext();
+  else flipPrev();
+});
+
+document.addEventListener('keydown', (e) => {
+  if (!$('#view-book').classList.contains('active')) return;
+  if (document.activeElement && document.activeElement.isContentEditable) return;
+  if (e.key === 'ArrowRight') flipNext();
+  else if (e.key === 'ArrowLeft') flipPrev();
+});
+
+$('#nextBtn').addEventListener('click', flipNext);
+$('#prevBtn').addEventListener('click', flipPrev);
+
+/* ===================== the wall ===================== */
+
+const board = $('#board');
+const boardCanvas = $('#boardCanvas');
+const moreBelowBtn = $('#moreBelow');
+let boardItems = [];      // { id, kind:'image'|'video', caption, x, y, w, rot, z, storagePath, url }
+let boardMaxZ = 10;
+const CANVAS_PAD = 260;   // always leave this much open canvas below the lowest item
+
+function updateEmpty() {
+  $('#boardEmpty').style.display = boardItems.length ? 'none' : '';
+}
+
+/* how far down the lowest pinned item currently reaches */
+function measureLowestBottom() {
+  let bottom = 0;
+  boardCanvas.querySelectorAll('.polaroid').forEach((it) => {
+    bottom = Math.max(bottom, it.offsetTop + it.offsetHeight);
+  });
+  return bottom;
+}
+
+function updateMoreBelow() {
+  const hidden = board.scrollHeight - board.clientHeight - board.scrollTop < 40;
+  moreBelowBtn.classList.toggle('show', !hidden);
+}
+
+/* grow the canvas (never shrink) so there's always room to drop/drag things further down */
+function growCanvasTo(minPx) {
+  if (minPx > boardCanvas.offsetHeight) boardCanvas.style.height = minPx + 'px';
+  updateMoreBelow();
+}
+
+function refreshCanvasSize() {
+  growCanvasTo(Math.max(board.clientHeight, measureLowestBottom() + CANVAS_PAD));
+}
+
+board.addEventListener('scroll', updateMoreBelow);
+moreBelowBtn.addEventListener('click', () => board.scrollTo({ top: boardCanvas.offsetHeight, behavior: 'smooth' }));
+
+function makeBoardItem(rec) {
+  const item = el('div', 'polaroid' + (rec.kind === 'video' ? ' polaroid-video' : ''));
+  item.style.left = rec.x + 'px';
+  item.style.top = rec.y + 'px';
+  item.style.width = rec.w + 'px';
+  item.style.zIndex = String(rec.z || 1);
+  item.style.setProperty('--rot', (rec.rot || 0) + 'deg');
+
+  let media;
+  if (rec.kind === 'video') {
+    media = el('video');
+    media.src = rec.url;
+    media.controls = true;
+    media.playsInline = true;
+    media.preload = 'metadata';
+    media.addEventListener('loadedmetadata', () => growCanvasTo(rec.y + item.offsetHeight + CANVAS_PAD));
+  } else {
+    media = el('img');
+    media.src = rec.url;
+    media.alt = '';
+    media.draggable = false;
+  }
+  item.appendChild(media);
+
+  item.appendChild(makeCaption(rec, 'board', 'polaroid-caption', 'write something…'));
+
+  const del = el('button', 'p-del', '✕');
+  del.title = 'Remove this ' + (rec.kind === 'video' ? 'video' : 'picture');
+  del.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    if (!confirm('Take this ' + (rec.kind === 'video' ? 'video' : 'picture') + ' off our wall?')) return;
+    await cloudDelete('board', rec);
+    boardItems = boardItems.filter((r) => r !== rec);
+    item.remove();
+    updateEmpty();
+  });
+  const rot = el('div', 'p-rotate', '⟲');
+  rot.title = 'Spin';
+  const rez = el('div', 'p-resize');
+  rez.title = 'Resize';
+  item.append(del, rot, rez);
+
+  /* drag to move */
+  item.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.p-del, .p-rotate, .p-resize, .polaroid-caption, video')) return;
+    e.preventDefault();
+    rec.z = ++boardMaxZ;
+    item.style.zIndex = String(rec.z);
+    item.classList.add('lifted');
+    const sx = e.clientX, sy = e.clientY, ox = rec.x, oy = rec.y;
+    item.setPointerCapture(e.pointerId);
+    const move = (ev) => {
+      rec.x = ox + ev.clientX - sx;
+      rec.y = oy + ev.clientY - sy;
+      item.style.left = rec.x + 'px';
+      item.style.top = rec.y + 'px';
+      growCanvasTo(rec.y + item.offsetHeight + CANVAS_PAD);
+    };
+    const up = () => {
+      item.removeEventListener('pointermove', move);
+      item.classList.remove('lifted');
+      cloudPut('board', rec);
+      refreshCanvasSize();
+    };
+    item.addEventListener('pointermove', move);
+    item.addEventListener('pointerup', up, { once: true });
+    item.addEventListener('pointercancel', up, { once: true });
+  });
+
+  /* corner dot: resize (based on distance from the middle, so it works while rotated) */
+  rez.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    rez.setPointerCapture(e.pointerId);
+    const r = item.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const d0 = Math.max(20, Math.hypot(e.clientX - cx, e.clientY - cy));
+    const w0 = rec.w;
+    const move = (ev) => {
+      const d = Math.hypot(ev.clientX - cx, ev.clientY - cy);
+      rec.w = Math.round(Math.min(640, Math.max(110, (w0 * d) / d0)));
+      item.style.width = rec.w + 'px';
+      growCanvasTo(rec.y + item.offsetHeight + CANVAS_PAD);
+    };
+    const up = () => { rez.removeEventListener('pointermove', move); cloudPut('board', rec); refreshCanvasSize(); };
+    rez.addEventListener('pointermove', move);
+    rez.addEventListener('pointerup', up, { once: true });
+    rez.addEventListener('pointercancel', up, { once: true });
+  });
+
+  /* top handle: rotate around the middle */
+  rot.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    rot.setPointerCapture(e.pointerId);
+    const r = item.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const move = (ev) => {
+      let a = (Math.atan2(ev.clientY - cy, ev.clientX - cx) * 180) / Math.PI + 90;
+      if (a > 180) a -= 360;
+      if (Math.abs(a) < 4) a = 0;            // gentle snap to straight
+      rec.rot = Math.round(a);
+      item.style.setProperty('--rot', rec.rot + 'deg');
+    };
+    const up = () => { rot.removeEventListener('pointermove', move); cloudPut('board', rec); };
+    rot.addEventListener('pointermove', move);
+    rot.addEventListener('pointerup', up, { once: true });
+    rot.addEventListener('pointercancel', up, { once: true });
+  });
+
+  boardCanvas.appendChild(item);
+  return item;
+}
+
+async function addBoardFiles(files) {
+  const list = [...files].filter((f) => f.type.startsWith('image/') || f.type.startsWith('video/'));
+  if (!list.length) return;
+  const bw = board.clientWidth;
+  let cursorY = boardItems.length ? measureLowestBottom() + 24 : 24;
+  let added = 0, tooBig = 0;
+  toast(list.length === 1 ? 'Uploading…' : 'Uploading ' + list.length + '…');
+
+  for (const f of list) {
+    const isVideo = f.type.startsWith('video/');
+    if (isVideo && f.size > MAX_VIDEO_BYTES) { tooBig++; continue; }
+    try {
+      const w = Math.round(180 + Math.random() * 90);
+      const blob = isVideo ? f : await shrink(f, 1200, 0.85);
+      const rec = await cloudAdd('board', {
+        kind: isVideo ? 'video' : 'image',
+        blob,
+        caption: '',
+        x: Math.round(24 + Math.random() * Math.max(1, bw - w - 60)),
+        y: Math.round(cursorY + Math.random() * 40),
+        w,
+        rot: Math.round(-8 + Math.random() * 16),
+        z: ++boardMaxZ,
+      });
+      boardItems.push(rec);
+      makeBoardItem(rec);
+      cursorY += Math.round(w * (isVideo ? 0.85 : 1.15)) + 30;
+      added++;
+    } catch (e) {
+      toast('Couldn’t add “' + f.name + '” — check your connection and try again');
+    }
+  }
+  if (tooBig) toast(tooBig === 1 ? 'A video was over 100MB, so it was skipped' : tooBig + ' videos were over 100MB, so they were skipped');
+  if (added) {
+    updateEmpty();
+    refreshCanvasSize();
+    requestAnimationFrame(() => board.scrollTo({ top: boardCanvas.offsetHeight, behavior: 'smooth' }));
+    toast(added === 1 ? '1 memory pinned to our wall ♥' : added + ' memories pinned to our wall ♥');
+  }
+}
+
+/* ===================== drag & drop files ===================== */
+
+function makeDropZone(zone, handler) {
+  zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('drop'); });
+  zone.addEventListener('dragleave', (e) => { if (!zone.contains(e.relatedTarget)) zone.classList.remove('drop'); });
+  zone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    zone.classList.remove('drop');
+    if (e.dataTransfer.files.length) handler(e.dataTransfer.files);
+  });
+}
+makeDropZone($('#view-book'), addBookFiles);
+makeDropZone(board, addBoardFiles);
+
+/* ===================== nav / intro / hearts ===================== */
+
+document.querySelectorAll('.nav-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('active', b === btn));
+    document.querySelectorAll('.view').forEach((v) => v.classList.remove('active'));
+    $('#view-' + btn.dataset.view).classList.add('active');
+  });
+});
+
+$('#introOpen').addEventListener('click', () => $('#intro').classList.add('hidden'));
+
+const heartsBox = $('#hearts');
+setInterval(() => {
+  if (document.hidden || heartsBox.childElementCount > 16) return;
+  const h = el('span', 'fheart', '♥');
+  h.style.left = Math.random() * 100 + 'vw';
+  h.style.fontSize = 10 + Math.random() * 18 + 'px';
+  h.style.animationDuration = 7 + Math.random() * 7 + 's';
+  h.style.setProperty('--o', (0.2 + Math.random() * 0.35).toFixed(2));
+  heartsBox.appendChild(h);
+  h.addEventListener('animationend', () => h.remove());
+}, 900);
+
+/* ===================== add-photo buttons ===================== */
+
+$('#addBookPhotos').addEventListener('click', () => $('#bookFile').click());
+$('#bookFile').addEventListener('change', (e) => { addBookFiles(e.target.files); e.target.value = ''; });
+$('#addBoardPhotos').addEventListener('click', () => $('#boardFile').click());
+$('#boardFile').addEventListener('change', (e) => { addBoardFiles(e.target.files); e.target.value = ''; });
+
+/* ===================== loading + live sync ===================== */
+
+async function loadBook() {
+  bookPhotos = await cloudAll('book');
+  buildBook();
+}
+
+async function loadBoard() {
+  const recs = await cloudAll('board');
+  boardCanvas.querySelectorAll('.polaroid').forEach((n) => n.remove());
+  boardItems = [];
+  boardMaxZ = 10;
+  const bw = board.clientWidth || window.innerWidth;
+  for (const rec of recs) {
+    rec.x = Math.max(4, Math.min(rec.x, bw - 70));       // keep pieces reachable if the window narrowed
+    rec.y = Math.max(4, rec.y);
+    boardMaxZ = Math.max(boardMaxZ, rec.z || 0);
+    boardItems.push(rec);
+    makeBoardItem(rec);
+  }
+  updateEmpty();
+  refreshCanvasSize();
+}
+
+/* keep both devices in sync — any change either of you make refreshes the other's view */
+function setupRealtime() {
+  let bookTimer, boardTimer;
+  sb.channel('book-sync')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'book' }, () => {
+      clearTimeout(bookTimer);
+      bookTimer = setTimeout(loadBook, 600);
+    })
+    .subscribe();
+  sb.channel('board-sync')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'board' }, () => {
+      clearTimeout(boardTimer);
+      boardTimer = setTimeout(loadBoard, 600);
+    })
+    .subscribe();
+}
+
+async function boot() {
+  await Promise.all([loadBook(), loadBoard()]);
+  setupRealtime();
+}
+
+/* ===================== passcode gate ===================== */
+
+function hideGate() {
+  $('#gate').classList.add('hidden');
+}
+
+$('#gateForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const pass = $('#gatePass').value;
+  const btn = $('#gateSubmit');
+  const err = $('#gateError');
+  btn.disabled = true;
+  err.classList.remove('show');
+  const { error } = await sb.auth.signInWithPassword({ email: SHARED_EMAIL, password: pass });
+  btn.disabled = false;
+  if (error) {
+    err.textContent = 'wrong passcode — try again';
+    err.classList.add('show');
+    $('#gatePass').value = '';
+    $('#gatePass').focus();
+    return;
+  }
+  hideGate();
+  boot();
+});
+
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) {
+    hideGate();
+    boot();
+  } else {
+    $('#gatePass').focus();
+  }
+})();

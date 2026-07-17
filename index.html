@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Unif ♥</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>❤️</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600;700&family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <div id="hearts" aria-hidden="true"></div>
+
+  <div id="gate">
+    <form id="gateForm" class="intro-inner">
+      <div class="intro-heart">♥</div>
+      <h1>Unif</h1>
+      <p>this little corner is just for us</p>
+      <input id="gatePass" class="gate-input" type="password" autocomplete="current-password" placeholder="our passcode" required>
+      <button type="submit" id="gateSubmit">unlock ♥</button>
+      <p id="gateError" class="gate-error"></p>
+    </form>
+  </div>
+
+  <div id="intro">
+    <div class="intro-inner">
+      <div class="intro-heart">♥</div>
+      <h1>Unif</h1>
+      <p>I made you a little something…</p>
+      <button id="introOpen">open it ♥</button>
+    </div>
+  </div>
+
+  <header>
+    <div class="logo">Unif <span>♥</span></div>
+    <nav>
+      <button class="nav-btn active" data-view="book">Our Book</button>
+      <button class="nav-btn" data-view="board">Our Wall</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="view-book" class="view active">
+      <div class="scene" id="scene">
+        <div class="book-shadow"></div>
+        <div class="book closed" id="book"></div>
+      </div>
+      <div class="book-controls">
+        <button id="prevBtn" class="round-btn" aria-label="Previous page">‹</button>
+        <button id="addBookPhotos" class="pill-btn">+ Add photos &amp; videos</button>
+        <button id="nextBtn" class="round-btn" aria-label="Next page">›</button>
+      </div>
+      <p class="hint">tap pages to flip · drag a photo to reframe it · hover a photo for fit &amp; zoom · drop photos or videos anywhere</p>
+    </section>
+
+    <section id="view-board" class="view">
+      <div class="board-bar">
+        <button id="addBoardPhotos" class="pill-btn">+ Add photos &amp; videos</button>
+        <p class="hint">drag to move · corner dot to resize · top handle to spin · scroll for more room · drop photos or videos anywhere</p>
+      </div>
+      <div id="board">
+        <div id="boardCanvas"></div>
+        <div id="boardEmpty" class="board-empty">this wall is waiting for our memories ♥</div>
+        <button id="moreBelow" class="more-below">↓ more room below</button>
+      </div>
+    </section>
+  </main>
+
+  <input type="file" id="bookFile" accept="image/*,video/*" multiple hidden>
+  <input type="file" id="boardFile" accept="image/*,video/*" multiple hidden>
+  <div id="toast" role="status"></div>
+
+  <script src="script.js"></script>
+</body>
+</html>
