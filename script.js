@@ -188,20 +188,13 @@ function pageNode(def, side) {
     p.classList.add('cover');
     p.innerHTML =
       '<div class="cover-inner">' +
-      '<div class="cover-top">our story</div>' +
-      '<div class="cover-name">Unif</div>' +
+      '<div class="cover-name">Tata &amp; Unif</div>' +
       '<div class="cover-heart">♥</div>' +
-      '<div class="cover-bottom">made with love · always</div>' +
       '</div>';
 
   } else if (def.type === 'backcover') {
     p.classList.add('backcover');
-    p.innerHTML =
-      '<div class="backcover-inner">' +
-      '<div class="big">The End?</div>' +
-      '<div class="big">never ♥</div>' +
-      '<div class="small">— to be continued, forever —</div>' +
-      '</div>';
+    p.innerHTML = '<div class="backcover-inner"></div>';
 
   } else if (def.type === 'text') {
     p.classList.add('text-page');
@@ -335,7 +328,7 @@ function buildBook() {
 
   const pages = [
     { type: 'cover' },
-    { type: 'text', html: 'For <b>Unif</b> —<br>every page of this book<br>is a piece of my heart.<br><span class="sig">I love you ♥</span>' },
+    { type: 'text', html: '' },
   ];
   if (bookPhotos.length === 0) {
     pages.push({ type: 'text', html: 'Our book is waiting<br>for its first memory…<br><br>tap <b>“+ Add photos &amp; videos”</b> below<br>and fill these pages with us ♥' });
@@ -343,7 +336,7 @@ function buildBook() {
     for (const ph of bookPhotos) pages.push({ type: ph.kind === 'video' ? 'video' : 'photo', photo: ph });
   }
   if (pages.length % 2 === 0) {
-    pages.push({ type: 'text', html: '…and we are still writing<br>our story ♥' });
+    pages.push({ type: 'text', html: '' });
   }
   pages.push({ type: 'backcover' });
 
