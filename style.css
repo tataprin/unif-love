@@ -272,16 +272,17 @@ main { flex: 1; display: flex; min-height: 0; }
 .photo-frame.contain img { cursor: default; object-fit: contain; }
 .video-frame { background: #1d0f16; touch-action: auto; }
 .video-frame video { object-fit: contain; }
+/* edit controls exist only in edit mode, and only on the two pages actually
+   facing the reader — never bleeding through from a page that just flipped away */
 .img-controls {
   position: absolute; left: 50%; bottom: 10px; z-index: 2;
   transform: translateX(-50%);
-  display: flex; align-items: center; gap: 7px;
+  display: none; align-items: center; gap: 7px;
   padding: 5px 8px; border-radius: 999px;
   background: rgba(90, 30, 50, .4); backdrop-filter: blur(3px);
-  opacity: 0; transition: opacity .25s;
   max-width: calc(100% - 16px);
 }
-.photo-page:hover .img-controls { opacity: 1; }
+#view-book.editing .page.live .img-controls { display: flex; }
 .img-ctrl {
   min-width: 30px; height: 30px; padding: 0 10px;
   border-radius: 999px; border: none;
@@ -291,17 +292,22 @@ main { flex: 1; display: flex; min-height: 0; }
   white-space: nowrap;
 }
 .img-ctrl:hover { transform: scale(1.08); }
-@media (hover: none) {
-  .photo-page .img-controls, .photo-page .photo-del { opacity: 1; }
-}
 .photo-del {
   position: absolute; top: 10px; right: 10px; z-index: 2;
   width: 28px; height: 28px; border-radius: 50%; border: 2px solid #fff;
   background: rgba(178, 58, 96, .92); color: #fff; font-size: 12px; line-height: 1;
-  cursor: pointer; opacity: 0; transition: opacity .25s, transform .2s;
+  cursor: pointer; display: none; transition: transform .2s;
 }
-.photo-page:hover .photo-del { opacity: 1; }
+#view-book.editing .page.live .photo-del { display: block; }
 .photo-del:hover { transform: scale(1.12); }
+
+/* view mode: photos are just photos — no reframing cursor, no caption editing,
+   no "write a caption…" ghost text on empty captions */
+#view-book .edit-only { display: none; }
+#view-book.editing .edit-only { display: inline-block; }
+#view-book:not(.editing) .page-caption { pointer-events: none; }
+#view-book:not(.editing) .page-caption:empty::before { content: none; }
+#view-book:not(.editing) .photo-frame img { cursor: default; }
 .page-caption {
   min-height: 34px; margin-top: 10px; padding: 2px 8px;
   font-family: var(--script); font-size: clamp(16px, 2.6vw, 23px);

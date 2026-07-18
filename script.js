@@ -161,6 +161,7 @@ async function cloudAll(store) {
 
 const bookEl = $('#book');
 let bookPhotos = [];      // { id, kind:'image'|'video', caption, fit, scale, posX, posY, storagePath, url }
+let bookEditMode = false; // photos are view-only until "Edit book" is tapped
 let sheetEls = [];
 let flipCount = 0;
 let animCounter = 0;
@@ -283,7 +284,7 @@ function pageNode(def, side) {
     /* drag on the photo to reposition which part shows (only matters in Fill mode) */
     let moved = false;
     frame.addEventListener('pointerdown', (e) => {
-      if (photo.fit === 'contain' || e.target.closest('.img-controls, .photo-del')) return;
+      if (!bookEditMode || photo.fit === 'contain' || e.target.closest('.img-controls, .photo-del')) return;
       frame.setPointerCapture(e.pointerId);
       const r = frame.getBoundingClientRect();
       const sx = e.clientX, sy = e.clientY, ox = photo.posX, oy = photo.posY;
@@ -307,7 +308,7 @@ function pageNode(def, side) {
     });
     frame.addEventListener('click', (e) => { if (moved) { e.stopPropagation(); moved = false; } });
     frame.addEventListener('wheel', (e) => {
-      if (photo.fit === 'contain') return;
+      if (!bookEditMode || photo.fit === 'contain') return;
       e.preventDefault();
       setScale(photo.scale - e.deltaY * 0.0015);
     }, { passive: false });
@@ -377,6 +378,12 @@ function applyFlips() {
   applyZ();
   $('#prevBtn').disabled = flipCount === 0;
   $('#nextBtn').disabled = flipCount === N;
+
+  // mark the two pages actually facing the reader — edit controls only ever
+  // appear on these, so a flipped-away page can't leave its buttons behind
+  bookEl.querySelectorAll('.page.live').forEach((p) => p.classList.remove('live'));
+  if (sheetEls[flipCount]) sheetEls[flipCount].children[0].classList.add('live');
+  if (flipCount > 0) sheetEls[flipCount - 1].children[1].classList.add('live');
 }
 
 /* Keep a turning sheet above everything while it moves. */
@@ -494,6 +501,12 @@ document.addEventListener('keydown', (e) => {
 
 $('#nextBtn').addEventListener('click', flipNext);
 $('#prevBtn').addEventListener('click', flipPrev);
+
+$('#bookModeBtn').addEventListener('click', () => {
+  bookEditMode = !bookEditMode;
+  $('#view-book').classList.toggle('editing', bookEditMode);
+  $('#bookModeBtn').textContent = bookEditMode ? '✓ Done' : '✏️ Edit book';
+});
 
 /* ===================== the wall ===================== */
 
