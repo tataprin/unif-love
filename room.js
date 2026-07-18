@@ -11,6 +11,18 @@ let cardOpened = false;
 let framePreviewOpen = false;
 let currentFramePhotoUrl = null;
 
+// playful bits
+const bulbs = [];
+const chairGroups = [];
+let glassesGroup, glassL, glassR;
+let clinkStart = -1, clinkPopped = false;
+let hovered = null;
+const particles = [];
+const heartTextures = [];
+let smokeTexture;
+let lastT = 0, lastAmbient = 0, ambientCount = 0;
+let audioCtx = null;
+
 async function startRoom() {
   if (started) return;
   started = true;
@@ -29,11 +41,14 @@ async function startRoom() {
   camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
   camera.position.set(0, 2.5, 4.4);
 
+  makeTextures();
   buildRoom();
+  buildWindow();
   buildTable();
   buildChairs();
   buildCandle();
   buildDecor();
+  buildGlasses();
   buildCard();
   await buildFrame();
 
@@ -45,6 +60,7 @@ async function startRoom() {
   onResize();
 
   canvas.addEventListener('click', onCanvasClick);
+  canvas.addEventListener('pointermove', onCanvasHover);
   // no click-outside-to-close on purpose — Yes is the only way out
 
   $('#roomLoading').classList.add('hidden');
@@ -81,19 +97,69 @@ function buildRoom() {
   dir.position.set(3, 5, 4);
   scene.add(dir);
 
-  // fairy lights strung along the back wall
+  // fairy lights strung along the back wall — pink & gold, twinkling
   const bulbGeo = new THREE.SphereGeometry(0.05, 8, 8);
   for (let i = 0; i < 16; i++) {
     const t = i / 15;
     const x = -3.8 + t * 7.6;
     const y = 2.15 + Math.sin(t * Math.PI * 4) * 0.28;
-    const bulb = new THREE.Mesh(
-      bulbGeo,
-      new THREE.MeshStandardMaterial({ color: 0xffe9b0, emissive: 0xffb347, emissiveIntensity: 1.8 })
-    );
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0xffe9b0,
+      emissive: i % 2 ? 0xffb347 : 0xff7fa8,
+      emissiveIntensity: 1.8,
+    });
+    const bulb = new THREE.Mesh(bulbGeo, mat);
     bulb.position.set(x, y, -3.05);
     scene.add(bulb);
+    bulbs.push({ mat, phase: i * 0.9 });
   }
+}
+
+/* a cozy night window with a moon, so the room feels like a date after dark */
+function buildWindow() {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 320;
+  const ctx = c.getContext('2d');
+  const grad = ctx.createLinearGradient(0, 0, 0, 320);
+  grad.addColorStop(0, '#2a2150');
+  grad.addColorStop(1, '#6e3a64');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 256, 320);
+  for (let i = 0; i < 42; i++) {
+    ctx.fillStyle = 'rgba(255,255,240,' + (0.35 + Math.random() * 0.6) + ')';
+    ctx.beginPath();
+    ctx.arc(Math.random() * 256, Math.random() * 320, 0.6 + Math.random() * 1.7, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const mx = 178, my = 74;
+  const glow = ctx.createRadialGradient(mx, my, 10, mx, my, 64);
+  glow.addColorStop(0, 'rgba(255,244,214,0.9)');
+  glow.addColorStop(1, 'rgba(255,244,214,0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(mx - 64, my - 64, 128, 128);
+  ctx.fillStyle = '#fff4d6';
+  ctx.beginPath();
+  ctx.arc(mx, my, 22, 0, Math.PI * 2);
+  ctx.fill();
+
+  const skyTex = new THREE.CanvasTexture(c);
+  skyTex.colorSpace = THREE.SRGBColorSpace;
+  const sky = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.9), new THREE.MeshBasicMaterial({ map: skyTex }));
+  sky.position.set(2.0, 2.35, -3.12);
+  scene.add(sky);
+
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
+  const mk = (w, h, x, y) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.06), frameMat);
+    m.position.set(2.0 + x, 2.35 + y, -3.1);
+    scene.add(m);
+  };
+  mk(1.62, 0.08, 0, 0.97);   // top
+  mk(1.62, 0.08, 0, -0.97);  // bottom
+  mk(0.08, 2.02, -0.77, 0);  // left
+  mk(0.08, 2.02, 0.77, 0);   // right
+  mk(1.56, 0.05, 0, 0);      // middle bar
+  mk(0.05, 1.96, 0, 0);      // center bar
 }
 
 function buildTable() {
@@ -156,11 +222,154 @@ function buildChairs() {
     g.position.set(x, 0, z);
     g.rotation.y = rotY;
     scene.add(g);
+    chairGroups.push(g);
   }
 
   chair(-1.85, -0.9, Math.PI * 0.28);
   chair(1.85, -0.9, -Math.PI * 0.28);
 }
+
+/* two wine glasses set for a toast — tap them to clink */
+function buildGlasses() {
+  glassesGroup = new THREE.Group();
+  const glassMat = new THREE.MeshStandardMaterial({
+    color: 0xffd6e2, transparent: true, opacity: 0.45, roughness: 0.1, side: THREE.DoubleSide,
+  });
+  const wineMat = new THREE.MeshStandardMaterial({ color: 0xd8365f, transparent: true, opacity: 0.9, roughness: 0.3 });
+
+  function glass(x) {
+    const g = new THREE.Group();
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.012, 16), glassMat);
+    base.position.y = 0.006;
+    g.add(base);
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.09, 8), glassMat);
+    stem.position.y = 0.055;
+    g.add(stem);
+    const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.035, 0.11, 16, 1, true), glassMat);
+    bowl.position.y = 0.155;
+    g.add(bowl);
+    const wine = new THREE.Mesh(new THREE.CylinderGeometry(0.047, 0.036, 0.05, 16), wineMat);
+    wine.position.y = 0.13;
+    g.add(wine);
+    g.position.set(x, 0, 0);
+    glassesGroup.add(g);
+    return g;
+  }
+
+  glassL = glass(-0.11);
+  glassR = glass(0.11);
+  glassesGroup.position.set(-0.08, 1.04, 0.55);
+  scene.add(glassesGroup);
+}
+
+/* ===== little textures drawn in code (hearts, smoke) ===== */
+
+function makeTextures() {
+  for (const color of ['#ff6f9c', '#ffa3c0', '#ffd76b', '#ff4f7e']) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const x = c.getContext('2d');
+    x.fillStyle = color;
+    x.beginPath();
+    x.moveTo(32, 54);
+    x.bezierCurveTo(6, 36, 2, 18, 16, 12);
+    x.bezierCurveTo(26, 8, 32, 16, 32, 22);
+    x.bezierCurveTo(32, 16, 38, 8, 48, 12);
+    x.bezierCurveTo(62, 18, 58, 36, 32, 54);
+    x.fill();
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    heartTextures.push(tex);
+  }
+
+  const s = document.createElement('canvas');
+  s.width = s.height = 64;
+  const sx = s.getContext('2d');
+  const g = sx.createRadialGradient(32, 32, 4, 32, 32, 30);
+  g.addColorStop(0, 'rgba(190,180,190,0.55)');
+  g.addColorStop(1, 'rgba(190,180,190,0)');
+  sx.fillStyle = g;
+  sx.fillRect(0, 0, 64, 64);
+  smokeTexture = new THREE.CanvasTexture(s);
+}
+
+/* ===== tiny floating particles (hearts, smoke) ===== */
+
+function spawnSprite(tex, pos, opts) {
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
+  const spr = new THREE.Sprite(mat);
+  spr.raycast = function () {};      // decorations never swallow clicks
+  spr.position.copy(pos);
+  spr.scale.setScalar(opts.size || 0.15);
+  scene.add(spr);
+  particles.push(Object.assign({
+    spr, vx: 0, vy: 0.3, vz: 0, life: 1, decay: 0.8, sway: 0, grow: 0,
+    phase: Math.random() * Math.PI * 2, ambient: false,
+  }, opts));
+}
+
+function heartTex() { return heartTextures[(Math.random() * heartTextures.length) | 0]; }
+
+function spawnHeartBurst(pos, n) {
+  for (let i = 0; i < n; i++) {
+    spawnSprite(heartTex(), pos, {
+      size: 0.09 + Math.random() * 0.08,
+      vx: (Math.random() - 0.5) * 0.7,
+      vy: 0.5 + Math.random() * 0.45,
+      vz: (Math.random() - 0.5) * 0.5,
+      decay: 1.1, sway: 0.02, grow: 0.05,
+    });
+  }
+}
+
+function spawnAmbientHeart() {
+  spawnSprite(heartTex(), new THREE.Vector3(-2.4 + Math.random() * 4.8, 0.15, -1.6 + Math.random() * 2.6), {
+    size: 0.1 + Math.random() * 0.1,
+    vy: 0.14 + Math.random() * 0.1,
+    decay: 0.12, sway: 0.09, ambient: true,
+  });
+  ambientCount++;
+}
+
+function spawnSmokePuffs(pos) {
+  for (let i = 0; i < 3; i++) {
+    spawnSprite(smokeTexture, pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.04, i * 0.03, 0)), {
+      size: 0.07 + i * 0.03, vy: 0.22, decay: 0.85, sway: 0.03, grow: 0.14,
+    });
+  }
+}
+
+/* ===== soft little sounds, generated on the spot ===== */
+
+function playTone(freq, dur, type, vol, delay) {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = type || 'sine';
+    o.frequency.value = freq;
+    const t0 = audioCtx.currentTime + (delay || 0);
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(vol || 0.05, t0 + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + (dur || 0.15));
+    o.connect(g);
+    g.connect(audioCtx.destination);
+    o.start(t0);
+    o.stop(t0 + (dur || 0.15) + 0.05);
+  } catch (e) { /* no sound is fine */ }
+}
+
+const sounds = {
+  pop() { playTone(740, 0.12, 'triangle', 0.05); },
+  clink() { playTone(1318, 0.1, 'triangle', 0.06); playTone(1568, 0.14, 'triangle', 0.05, 0.07); },
+  chime() { playTone(523, 0.2, 'sine', 0.05); playTone(659, 0.22, 'sine', 0.05, 0.1); playTone(784, 0.3, 'sine', 0.05, 0.2); },
+  fanfare() { playTone(523, 0.25, 'triangle', 0.06); playTone(659, 0.25, 'triangle', 0.06, 0.12); playTone(784, 0.3, 'triangle', 0.06, 0.24); playTone(1047, 0.45, 'triangle', 0.06, 0.36); },
+  blow() { playTone(220, 0.18, 'sine', 0.045); },
+  light() { playTone(587, 0.14, 'sine', 0.045); },
+  wiggle() { playTone(392, 0.09, 'triangle', 0.04); },
+  boop() { playTone(196, 0.09, 'square', 0.03); },
+};
 
 function buildCandle() {
   const group = new THREE.Group();
@@ -200,6 +409,12 @@ function buildCandle() {
 function toggleCandle() {
   candleLit = !candleLit;
   candleFlameMesh.visible = candleLit;
+  if (candleLit) {
+    sounds.light();
+  } else {
+    sounds.blow();
+    spawnSmokePuffs(new THREE.Vector3(0, 1.4, -0.35));
+  }
 }
 
 function buildDecor() {
@@ -375,21 +590,61 @@ function closeFramePreview() {
   $('#framePreview').classList.add('hidden');
 }
 
-function onCanvasClick(event) {
-  if (cardOpened || framePreviewOpen) return;
+function setPointerFromEvent(event) {
   const canvas = $('#roomCanvas');
   const rect = canvas.getBoundingClientRect();
   pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
   pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
   raycaster.setFromCamera(pointer, camera);
+}
+
+function hoverables() {
+  return [cardMesh, frameGroup, candleGroup, glassesGroup, ...chairGroups].filter(Boolean);
+}
+
+function onCanvasClick(event) {
+  if (cardOpened || framePreviewOpen) return;
+  setPointerFromEvent(event);
 
   if (raycaster.intersectObject(cardMesh, true).length) { openCard(); return; }
   if (frameGroup && raycaster.intersectObject(frameGroup, true).length) { openFramePreview(); return; }
   if (candleGroup && raycaster.intersectObject(candleGroup, true).length) { toggleCandle(); return; }
+  if (glassesGroup && raycaster.intersectObject(glassesGroup, true).length && clinkStart < 0) {
+    clinkStart = clock.getElapsedTime();
+    clinkPopped = false;
+    return;
+  }
+  for (const chair of chairGroups) {
+    if (raycaster.intersectObject(chair, true).length) {
+      chair.userData.wiggleStart = clock.getElapsedTime();
+      sounds.wiggle();
+      return;
+    }
+  }
+
+  // tapping anywhere else pops a little burst of hearts right there
+  const hits = raycaster.intersectObjects(scene.children, true);
+  if (hits.length) {
+    const p = hits[0].point.clone();
+    p.y += 0.06;
+    spawnHeartBurst(p, 6);
+    sounds.pop();
+  }
+}
+
+function onCanvasHover(event) {
+  if (cardOpened || framePreviewOpen) { hovered = null; return; }
+  setPointerFromEvent(event);
+  hovered = null;
+  for (const obj of hoverables()) {
+    if (raycaster.intersectObject(obj, true).length) { hovered = obj; break; }
+  }
+  $('#roomCanvas').style.cursor = hovered ? 'pointer' : 'default';
 }
 
 async function openCard() {
   cardOpened = true;
+  sounds.chime();
   await loadCardMessage();
   $('#cardOverlay').classList.remove('hidden');
   resetNoButton();
@@ -457,6 +712,7 @@ function resetNoButton() {
 function dodgeNoButton() {
   const { w, h, btnW, btnH, pad } = overlayBounds();
   placeNoButtonPx(pad + Math.random() * Math.max(10, w - btnW - pad * 2), pad + Math.random() * Math.max(10, h - btnH - pad * 2));
+  sounds.boop();
 }
 
 function wakeAndDodge() {
@@ -479,12 +735,15 @@ noBtn.addEventListener('click', (e) => { e.preventDefault(); wakeAndDodge(); });
 
 $('#yesBtn').addEventListener('click', () => {
   closeCard();
+  sounds.fanfare();
   launchCelebration();
 });
 
 function animate() {
   requestAnimationFrame(animate);
   const t = clock.getElapsedTime();
+  const dt = Math.min(t - lastT, 0.05);
+  lastT = t;
 
   if (cardMesh && !cardOpened) {
     cardMesh.position.y = 1.05 + Math.sin(t * 2) * 0.015;
@@ -492,6 +751,76 @@ function animate() {
   }
   if (candleLight) {
     candleLight.intensity = candleLit ? 0.85 + Math.sin(t * 9) * 0.15 + Math.sin(t * 23) * 0.06 : 0;
+  }
+
+  // fairy lights twinkle out of step with each other
+  for (const b of bulbs) {
+    b.mat.emissiveIntensity = 1.3 + Math.sin(t * 2.4 + b.phase) * 0.7;
+  }
+
+  // wine glass clink
+  if (clinkStart >= 0) {
+    const p = (t - clinkStart) / 0.6;
+    if (p >= 1) {
+      glassL.rotation.z = 0;
+      glassR.rotation.z = 0;
+      clinkStart = -1;
+    } else {
+      const tilt = Math.sin(p * Math.PI) * 0.32;
+      glassL.rotation.z = -tilt;
+      glassR.rotation.z = tilt;
+      if (p > 0.45 && !clinkPopped) {
+        clinkPopped = true;
+        sounds.clink();
+        const mid = new THREE.Vector3();
+        glassesGroup.getWorldPosition(mid);
+        mid.y += 0.24;
+        spawnHeartBurst(mid, 4);
+      }
+    }
+  }
+
+  // chair wiggles
+  for (const chair of chairGroups) {
+    if (chair.userData.wiggleStart !== undefined) {
+      const p = (t - chair.userData.wiggleStart) / 0.6;
+      if (p >= 1) {
+        chair.rotation.z = 0;
+        delete chair.userData.wiggleStart;
+      } else {
+        chair.rotation.z = Math.sin(p * Math.PI * 4) * 0.06 * (1 - p);
+      }
+    }
+  }
+
+  // hovered things lean in a little
+  for (const obj of hoverables()) {
+    const target = obj === hovered ? 1.05 : 1;
+    obj.scale.setScalar(obj.scale.x + (target - obj.scale.x) * Math.min(1, dt * 10));
+  }
+
+  // floating hearts & smoke
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.life -= p.decay * dt;
+    if (p.life <= 0) {
+      scene.remove(p.spr);
+      p.spr.material.dispose();
+      if (p.ambient) ambientCount--;
+      particles.splice(i, 1);
+      continue;
+    }
+    p.spr.position.x += (p.vx + Math.sin(t * 2.4 + p.phase) * p.sway) * dt;
+    p.spr.position.y += p.vy * dt;
+    p.spr.position.z += p.vz * dt;
+    if (p.grow) p.spr.scale.setScalar(p.spr.scale.x + p.grow * dt);
+    p.spr.material.opacity = Math.min(1, p.life);
+  }
+
+  // a slow drip of ambient hearts drifting through the room
+  if (t - lastAmbient > 1.3 && ambientCount < 9) {
+    lastAmbient = t;
+    spawnAmbientHeart();
   }
 
   camera.position.x = Math.sin(t * 0.15) * 0.18;
