@@ -470,7 +470,7 @@ main { flex: 1; display: flex; min-height: 0; }
   position: absolute; z-index: 20;
   color: var(--pink-dark); background: #fff; border: 2px solid rgba(224, 80, 122, .3);
   box-shadow: 0 6px 18px rgba(90, 30, 50, .25);
-  transition: left .22s ease, top .22s ease, transform .15s ease;   /* glides away, doesn't teleport */
+  transition: left .26s cubic-bezier(.3, .7, .3, 1), top .26s cubic-bezier(.3, .7, .3, 1), transform .15s ease;   /* one smooth glide per dodge */
 }
 
 #fxCanvas {

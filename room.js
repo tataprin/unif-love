@@ -709,15 +709,40 @@ function resetNoButton() {
   placeNoButtonPx(yesRect.right - overlayRect.left + 18, yesRect.top - overlayRect.top + 5);
 }
 
-function dodgeNoButton() {
+let lastDodgeAt = 0;
+
+function dodgeNoButton(pointerX, pointerY) {
+  // ignore re-triggers while the button is still mid-glide — this is what made
+  // it jitter and spam sounds when the cursor sat in its flight path
+  const now = performance.now();
+  if (now - lastDodgeAt < 280) return;
+  lastDodgeAt = now;
+
   const { w, h, btnW, btnH, pad } = overlayBounds();
-  placeNoButtonPx(pad + Math.random() * Math.max(10, w - btnW - pad * 2), pad + Math.random() * Math.max(10, h - btnH - pad * 2));
+  const rect = cardOverlayEl.getBoundingClientRect();
+  const cx = pointerX != null ? pointerX - rect.left : w / 2;
+  const cy = pointerY != null ? pointerY - rect.top : h / 2;
+
+  // sample random spots and flee to one genuinely far from the cursor,
+  // instead of possibly hopping right back under it
+  const farEnough = Math.hypot(w, h) * 0.4;
+  let best = null, bestD = -1;
+  const okSpots = [];
+  for (let i = 0; i < 14; i++) {
+    const x = pad + Math.random() * Math.max(10, w - btnW - pad * 2);
+    const y = pad + Math.random() * Math.max(10, h - btnH - pad * 2);
+    const d = Math.hypot(x + btnW / 2 - cx, y + btnH / 2 - cy);
+    if (d > bestD) { bestD = d; best = { x, y }; }
+    if (d > farEnough) okSpots.push({ x, y });
+  }
+  const spot = okSpots.length ? okSpots[(Math.random() * okSpots.length) | 0] : best;
+  placeNoButtonPx(spot.x, spot.y);
   sounds.boop();
 }
 
-function wakeAndDodge() {
+function wakeAndDodge(e) {
   noAwake = true;
-  dodgeNoButton();
+  dodgeNoButton(e && e.clientX, e && e.clientY);
 }
 
 // stays put until the cursor actually reaches it for the first time — only then does it "wake up"
@@ -725,11 +750,11 @@ cardOverlayEl.addEventListener('pointermove', (e) => {
   if (cardOverlayEl.classList.contains('hidden') || !noAwake) return;
   const r = noBtn.getBoundingClientRect();
   const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-  if (Math.hypot(e.clientX - cx, e.clientY - cy) < 95) dodgeNoButton();
+  if (Math.hypot(e.clientX - cx, e.clientY - cy) < 95) dodgeNoButton(e.clientX, e.clientY);
 });
-noBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); wakeAndDodge(); });
-noBtn.addEventListener('pointerenter', () => wakeAndDodge());
-noBtn.addEventListener('click', (e) => { e.preventDefault(); wakeAndDodge(); });
+noBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); wakeAndDodge(e); });
+noBtn.addEventListener('pointerenter', (e) => wakeAndDodge(e));
+noBtn.addEventListener('click', (e) => { e.preventDefault(); wakeAndDodge(e); });
 
 /* ===== the "Yes" button ===== */
 
