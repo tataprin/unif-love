@@ -58,6 +58,7 @@ const SIGNED_URL_TTL = 6 * 60 * 60; // 6 hours — long enough for a normal visi
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 window.sb = sb;          // shared with room.js so it doesn't need its own session
 window.BUCKET = BUCKET;
+window.shrink = shrink;
 
 function rowToRec(store, row) {
   const rec = {

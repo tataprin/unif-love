@@ -84,8 +84,15 @@
           </div>
           <button id="noBtn" class="card-no">No</button>
         </div>
+        <div id="framePreview" class="frame-preview hidden">
+          <div class="frame-preview-inner">
+            <button id="framePreviewClose" class="frame-preview-close">✕</button>
+            <img id="framePreviewImg" alt="the picture in the frame">
+            <button id="frameChangeBtn" class="pill-btn">Change photo</button>
+          </div>
+        </div>
       </div>
-      <p class="hint">tap the card on the table ♥</p>
+      <p class="hint">tap the card to open it · tap the photo frame to look closer ♥</p>
     </section>
   </main>
 
@@ -93,6 +100,7 @@
 
   <input type="file" id="bookFile" accept="image/*,video/*" multiple hidden>
   <input type="file" id="boardFile" accept="image/*,video/*" multiple hidden>
+  <input type="file" id="framePhotoFile" accept="image/*" hidden>
   <div id="toast" role="status"></div>
 
   <script src="script.js"></script>

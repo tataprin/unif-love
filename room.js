@@ -5,9 +5,11 @@ const $ = (sel) => document.querySelector(sel);
 
 let started = false;
 let renderer, scene, camera, clock;
-let cardMesh, candleLight;
+let cardMesh, candleLight, candleGroup, candleFlameMesh, candleLit = true;
 let raycaster, pointer;
 let cardOpened = false;
+let framePreviewOpen = false;
+let currentFramePhotoUrl = null;
 
 async function startRoom() {
   if (started) return;
@@ -31,6 +33,7 @@ async function startRoom() {
   buildTable();
   buildChairs();
   buildCandle();
+  buildDecor();
   buildCard();
   await buildFrame();
 
@@ -42,9 +45,7 @@ async function startRoom() {
   onResize();
 
   canvas.addEventListener('click', onCanvasClick);
-  $('#cardOverlay').addEventListener('click', (e) => {
-    if (e.target.id === 'cardOverlay') closeCard();
-  });
+  // no click-outside-to-close on purpose — Yes is the only way out
 
   $('#roomLoading').classList.add('hidden');
   animate();
@@ -164,6 +165,14 @@ function buildChairs() {
 function buildCandle() {
   const group = new THREE.Group();
 
+  // a little wider hit-target so the flame is easy to tap
+  const catcher = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.14, 0.14, 0.5, 12),
+    new THREE.MeshBasicMaterial({ visible: false })
+  );
+  catcher.position.y = 0.2;
+  group.add(catcher);
+
   const wax = new THREE.Mesh(
     new THREE.CylinderGeometry(0.05, 0.055, 0.28, 16),
     new THREE.MeshStandardMaterial({ color: 0xfff3d6, roughness: 0.5 })
@@ -177,6 +186,7 @@ function buildCandle() {
   );
   flame.position.y = 0.32;
   group.add(flame);
+  candleFlameMesh = flame;
 
   candleLight = new THREE.PointLight(0xffc088, 0.85, 4.5, 2);
   candleLight.position.set(0, 0.35, 0);
@@ -184,6 +194,44 @@ function buildCandle() {
 
   group.position.set(0, 1.04, -0.35);
   scene.add(group);
+  candleGroup = group;
+}
+
+function toggleCandle() {
+  candleLit = !candleLit;
+  candleFlameMesh.visible = candleLit;
+}
+
+function buildDecor() {
+  // rug under the table
+  const rug = new THREE.Mesh(
+    new THREE.CircleGeometry(2.3, 40),
+    new THREE.MeshStandardMaterial({ color: 0xf0b8cc, roughness: 1 })
+  );
+  rug.rotation.x = -Math.PI / 2;
+  rug.position.y = 0.004;
+  scene.add(rug);
+  const rugRing = new THREE.Mesh(
+    new THREE.RingGeometry(2.14, 2.3, 48),
+    new THREE.MeshStandardMaterial({ color: 0xe0507a, roughness: 1, side: THREE.DoubleSide })
+  );
+  rugRing.rotation.x = -Math.PI / 2;
+  rugRing.position.y = 0.005;
+  scene.add(rugRing);
+
+  // place settings — a plate at each chair
+  const plateMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
+  const rimMat = new THREE.MeshStandardMaterial({ color: 0xe0507a, roughness: 0.5 });
+  [[-0.9, -0.44], [0.9, -0.44]].forEach(([px, pz]) => {
+    const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.015, 32), plateMat);
+    plate.position.set(px, 1.048, pz);
+    scene.add(plate);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.006, 8, 32), rimMat);
+    rim.rotation.x = Math.PI / 2;
+    rim.position.set(px, 1.057, pz);
+    scene.add(rim);
+  });
+
 }
 
 function buildCard() {
@@ -225,6 +273,37 @@ function buildCard() {
   cardMesh = group;
 }
 
+let frameGroup, framePhotoMesh;
+
+async function resolveFramePhotoUrl() {
+  const sb = window.sb;
+  try {
+    const { data: setting } = await sb.from('settings').select('value').eq('key', 'frame_photo_path').maybeSingle();
+    if (setting && setting.value) {
+      const { data: signed } = await sb.storage.from(window.BUCKET).createSignedUrl(setting.value, 3600);
+      if (signed) return signed.signedUrl;
+    }
+  } catch (e) { /* no custom photo chosen yet */ }
+  try {
+    const { data: rows } = await sb.from('book').select('storage_path').order('created_at', { ascending: false }).limit(1);
+    if (rows && rows[0]) {
+      const { data: signed } = await sb.storage.from(window.BUCKET).createSignedUrl(rows[0].storage_path, 3600);
+      if (signed) return signed.signedUrl;
+    }
+  } catch (e) { /* no book photo either */ }
+  return null;
+}
+
+async function applyFrameTexture(url) {
+  if (!url) return;
+  const texture = await new THREE.TextureLoader().loadAsync(url);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  if (framePhotoMesh.material.map) framePhotoMesh.material.map.dispose();
+  framePhotoMesh.material.dispose();
+  framePhotoMesh.material = new THREE.MeshBasicMaterial({ map: texture });
+  currentFramePhotoUrl = url;
+}
+
 async function buildFrame() {
   const group = new THREE.Group();
 
@@ -234,31 +313,20 @@ async function buildFrame() {
   );
   group.add(border);
 
-  let texture = null;
-  try {
-    const sb = window.sb;
-    const { data: rows } = await sb
-      .from('book')
-      .select('storage_path')
-      .order('created_at', { ascending: false })
-      .limit(1);
-    if (rows && rows[0]) {
-      const { data: signed } = await sb.storage.from(window.BUCKET).createSignedUrl(rows[0].storage_path, 3600);
-      if (signed) {
-        texture = await new THREE.TextureLoader().loadAsync(signed.signedUrl);
-        texture.colorSpace = THREE.SRGBColorSpace;
-      }
-    }
-  } catch (e) {
-    // no photo yet, or couldn't load one — fall back to a plain heart-toned pane below
+  const url = await resolveFramePhotoUrl();
+  let photoMat;
+  if (url) {
+    const texture = await new THREE.TextureLoader().loadAsync(url);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    photoMat = new THREE.MeshBasicMaterial({ map: texture });
+    currentFramePhotoUrl = url;
+  } else {
+    photoMat = new THREE.MeshStandardMaterial({ color: 0xffd9e6 });
   }
-
-  const photoMat = texture
-    ? new THREE.MeshBasicMaterial({ map: texture })
-    : new THREE.MeshStandardMaterial({ color: 0xffd9e6 });
   const photo = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.54), photoMat);
   photo.position.z = 0.016;
   group.add(photo);
+  framePhotoMesh = photo;
 
   const stand = new THREE.Mesh(
     new THREE.BoxGeometry(0.04, 0.32, 0.04),
@@ -272,17 +340,52 @@ async function buildFrame() {
   group.rotation.y = 0.35;
   group.rotation.x = -0.08;
   scene.add(group);
+  frameGroup = group;
+}
+
+async function changeFramePhoto(file) {
+  try {
+    const blob = await window.shrink(file, 1000, 0.85);
+    const path = 'frame/' + crypto.randomUUID();
+    const sb = window.sb;
+    const { error: upErr } = await sb.storage.from(window.BUCKET).upload(path, blob, { contentType: 'image/jpeg' });
+    if (upErr) throw upErr;
+    const { error: setErr } = await sb
+      .from('settings')
+      .upsert({ key: 'frame_photo_path', value: path }, { onConflict: 'key' });
+    if (setErr) throw setErr;
+    const { data: signed } = await sb.storage.from(window.BUCKET).createSignedUrl(path, 3600);
+    if (signed) {
+      await applyFrameTexture(signed.signedUrl);
+      if (framePreviewOpen) $('#framePreviewImg').src = signed.signedUrl;
+    }
+  } catch (e) {
+    // silently ignore — the frame just keeps its current photo
+  }
+}
+
+function openFramePreview() {
+  framePreviewOpen = true;
+  $('#framePreviewImg').src = currentFramePhotoUrl || '';
+  $('#framePreview').classList.remove('hidden');
+}
+
+function closeFramePreview() {
+  framePreviewOpen = false;
+  $('#framePreview').classList.add('hidden');
 }
 
 function onCanvasClick(event) {
-  if (cardOpened) return;
+  if (cardOpened || framePreviewOpen) return;
   const canvas = $('#roomCanvas');
   const rect = canvas.getBoundingClientRect();
   pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
   pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
   raycaster.setFromCamera(pointer, camera);
-  const hits = raycaster.intersectObject(cardMesh, true);
-  if (hits.length) openCard();
+
+  if (raycaster.intersectObject(cardMesh, true).length) { openCard(); return; }
+  if (frameGroup && raycaster.intersectObject(frameGroup, true).length) { openFramePreview(); return; }
+  if (candleGroup && raycaster.intersectObject(candleGroup, true).length) { toggleCandle(); return; }
 }
 
 async function openCard() {
@@ -303,7 +406,7 @@ let lastSavedMessage = null;
 async function loadCardMessage() {
   const el = $('#cardMessage');
   try {
-    const { data } = await window.sb.from('settings').select('value').eq('key', 'card_message').single();
+    const { data } = await window.sb.from('settings').select('value').eq('key', 'card_message').maybeSingle();
     lastSavedMessage = (data && data.value) || '';
     el.textContent = lastSavedMessage;
   } catch (e) {
@@ -326,8 +429,6 @@ cardMessageEl.addEventListener('blur', async () => {
 /* ===== the "No" button — playfully impossible to press, and free to roam
    the whole scene, not just the card ===== */
 
-const noPhrases = ['No', 'Nope', 'Are you sure?', 'Really?', 'Think again!', "You can't catch me", 'Pretty please?', 'Last chance…', 'Hmm, no.', 'Try again? ♥'];
-let noDodgeCount = 0;
 let noAwake = false;    // stays put like a normal button until the cursor first reaches it
 const noBtn = $('#noBtn');
 const cardOverlayEl = $('#cardOverlay');
@@ -346,9 +447,7 @@ function placeNoButtonPx(x, y) {
 }
 
 function resetNoButton() {
-  noDodgeCount = 0;
   noAwake = false;
-  noBtn.textContent = noPhrases[0];
   // start out looking like a completely normal, static button, right beside Yes
   const overlayRect = cardOverlayEl.getBoundingClientRect();
   const yesRect = $('#yesBtn').getBoundingClientRect();
@@ -356,8 +455,6 @@ function resetNoButton() {
 }
 
 function dodgeNoButton() {
-  noDodgeCount++;
-  noBtn.textContent = noPhrases[Math.min(noDodgeCount, noPhrases.length - 1)];
   const { w, h, btnW, btnH, pad } = overlayBounds();
   placeNoButtonPx(pad + Math.random() * Math.max(10, w - btnW - pad * 2), pad + Math.random() * Math.max(10, h - btnH - pad * 2));
 }
@@ -394,7 +491,7 @@ function animate() {
     cardMesh.rotation.y = -0.35 + Math.sin(t * 0.8) * 0.06;
   }
   if (candleLight) {
-    candleLight.intensity = 1.15 + Math.sin(t * 9) * 0.15 + Math.sin(t * 23) * 0.06;
+    candleLight.intensity = candleLit ? 0.85 + Math.sin(t * 9) * 0.15 + Math.sin(t * 23) * 0.06 : 0;
   }
 
   camera.position.x = Math.sin(t * 0.15) * 0.18;
@@ -535,6 +632,18 @@ document.querySelectorAll('.nav-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
     if (btn.dataset.view === 'surprise') startRoom();
   });
+});
+
+$('#framePhotoFile').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (file && file.type.startsWith('image/')) changeFramePhoto(file);
+});
+
+$('#frameChangeBtn').addEventListener('click', () => $('#framePhotoFile').click());
+$('#framePreviewClose').addEventListener('click', closeFramePreview);
+$('#framePreview').addEventListener('click', (e) => {
+  if (e.target.id === 'framePreview') closeFramePreview();
 });
 
 })();
