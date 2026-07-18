@@ -273,25 +273,30 @@ main { flex: 1; display: flex; min-height: 0; }
 .video-frame { background: #1d0f16; touch-action: auto; }
 .video-frame video { object-fit: contain; }
 .img-controls {
-  position: absolute; top: 10px; left: 10px; right: 42px; z-index: 2;
-  display: flex; flex-wrap: wrap; gap: 6px;
+  position: absolute; left: 50%; bottom: 10px; z-index: 2;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 7px;
+  padding: 5px 8px; border-radius: 999px;
+  background: rgba(90, 30, 50, .4); backdrop-filter: blur(3px);
   opacity: 0; transition: opacity .25s;
+  max-width: calc(100% - 16px);
 }
 .photo-page:hover .img-controls { opacity: 1; }
 .img-ctrl {
-  min-width: 26px; height: 26px; padding: 0 8px;
-  border-radius: 999px; border: 2px solid #fff;
-  background: rgba(90, 30, 50, .85); color: #fff;
-  font-family: inherit; font-size: 12px; font-weight: 700; line-height: 1;
+  min-width: 30px; height: 30px; padding: 0 10px;
+  border-radius: 999px; border: none;
+  background: rgba(255, 255, 255, .94); color: var(--pink-dark);
+  font-family: inherit; font-size: 12.5px; font-weight: 700; line-height: 1;
   cursor: pointer; transition: transform .15s;
+  white-space: nowrap;
 }
-.img-ctrl:hover { transform: scale(1.1); }
+.img-ctrl:hover { transform: scale(1.08); }
 @media (hover: none) {
-  .photo-page .img-controls, .photo-page .photo-del { opacity: .6; }
+  .photo-page .img-controls, .photo-page .photo-del { opacity: 1; }
 }
 .photo-del {
   position: absolute; top: 10px; right: 10px; z-index: 2;
-  width: 26px; height: 26px; border-radius: 50%; border: 2px solid #fff;
+  width: 28px; height: 28px; border-radius: 50%; border: 2px solid #fff;
   background: rgba(178, 58, 96, .92); color: #fff; font-size: 12px; line-height: 1;
   cursor: pointer; opacity: 0; transition: opacity .25s, transform .2s;
 }
@@ -331,7 +336,19 @@ main { flex: 1; display: flex; min-height: 0; }
   background-color: #fffdfb;
   background-image: radial-gradient(rgba(224, 80, 122, .14) 1.2px, transparent 1.4px);
   background-size: 22px 22px;
+  transform-origin: 0 0;
 }
+
+/* view mode: the wall is look-don't-touch — pictures can't move, fingers scroll naturally */
+.board-bar .edit-only { display: none; }
+.board-bar.editing .edit-only { display: inline-block; }
+#board.view-mode .polaroid { touch-action: auto; cursor: default; }
+#board.view-mode .polaroid.lifted { cursor: default; }
+#board.view-mode .p-del,
+#board.view-mode .p-rotate,
+#board.view-mode .p-resize { display: none; }
+#board.view-mode .polaroid-caption { pointer-events: none; }
+.round-btn.small { width: 38px; height: 38px; font-size: 20px; }
 .board-empty {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
@@ -507,6 +524,8 @@ main { flex: 1; display: flex; min-height: 0; }
 
 /* ---------- small screens ---------- */
 @media (max-width: 560px) {
+  :root { --pw: min(46vw, 40vh); }   /* a roomier book on phone screens */
+
   header { padding: 10px 14px; flex-wrap: wrap; justify-content: center; gap: 8px; }
   .logo { font-size: 26px; }
   nav { gap: 4px; padding: 4px; }
@@ -515,16 +534,16 @@ main { flex: 1; display: flex; min-height: 0; }
   .pill-btn { font-size: 13.5px; padding: 11px 18px; }
   .round-btn { width: 40px; height: 40px; font-size: 22px; }
 
-  /* photo page controls are tight on a phone-width page — shrink and let them wrap */
-  .img-controls { top: 8px; left: 8px; right: 36px; gap: 4px; }
-  .img-ctrl { min-width: 22px; height: 22px; padding: 0 6px; font-size: 11px; }
-  .photo-del { top: 8px; right: 8px; width: 22px; height: 22px; font-size: 10px; }
+  /* photo controls keep real touch-target sizes; the bar is translucent so it can afford to */
+  .img-controls { bottom: 8px; gap: 5px; padding: 4px 6px; }
+  .img-ctrl { min-width: 30px; height: 30px; padding: 0 8px; font-size: 12px; }
+  .photo-del { top: 8px; right: 8px; width: 28px; height: 28px; font-size: 11px; }
   .page-caption { font-size: 15px; min-height: 26px; }
 
   .polaroid-caption { font-size: 16px; }
-  .p-del { width: 22px; height: 22px; font-size: 10px; }
-  .p-rotate { top: -28px; width: 20px; height: 20px; font-size: 11px; line-height: 17px; }
-  .p-resize { width: 17px; height: 17px; }
+  .p-del { width: 24px; height: 24px; font-size: 10px; }
+  .p-rotate { top: -30px; width: 22px; height: 22px; font-size: 11px; line-height: 19px; }
+  .p-resize { width: 19px; height: 19px; }
 
   .opened-card { padding: 26px 18px 20px; gap: 18px; min-height: 220px; }
   .card-message { font-size: 18px; min-height: 56px; }

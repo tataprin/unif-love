@@ -455,12 +455,34 @@ async function addBookFiles(files) {
   toast(added === 1 ? 'Added 1 memory to our book ♥' : 'Added ' + added + ' memories to our book ♥');
 }
 
-/* click left half = back, right half = forward */
+/* click left half = back, right half = forward.
+   the photo itself is excluded — tapping a photo used to flip the page out from
+   under you on phones, right when you were reaching for its edit buttons */
+let lastSwipeAt = 0;
 $('#scene').addEventListener('click', (e) => {
-  if (e.target.closest('.page-caption, .photo-del, .img-controls, video')) return;
+  if (e.target.closest('.page-caption, .photo-del, .img-controls, .photo-frame, video')) return;
+  if (Date.now() - lastSwipeAt < 400) return;
   const r = bookEl.getBoundingClientRect();
   if (e.clientX >= r.left + r.width / 2) flipNext();
   else flipPrev();
+});
+
+/* swipe left/right anywhere outside a photo to flip — the natural phone gesture */
+let swipeStart = null;
+$('#scene').addEventListener('pointerdown', (e) => {
+  if (e.target.closest('.photo-frame, .page-caption, button, video')) return;
+  swipeStart = { x: e.clientX, y: e.clientY };
+});
+$('#scene').addEventListener('pointerup', (e) => {
+  if (!swipeStart) return;
+  const dx = e.clientX - swipeStart.x;
+  const dy = e.clientY - swipeStart.y;
+  swipeStart = null;
+  if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+    lastSwipeAt = Date.now();
+    if (dx < 0) flipNext();
+    else flipPrev();
+  }
 });
 
 document.addEventListener('keydown', (e) => {
@@ -481,6 +503,21 @@ let boardItems = [];      // { id, kind:'image'|'video', caption, x, y, w, rot, 
 let boardMaxZ = 10;
 const boardItemEls = new Map();  // rec.id -> DOM element, for layout math (e.g. sorting)
 const CANVAS_PAD = 260;   // always leave this much open canvas below the lowest item
+let boardEditMode = false;       // starts locked — browsing can't accidentally rearrange the wall
+let boardZoom = 1;
+
+function applyBoardMode() {
+  board.classList.toggle('view-mode', !boardEditMode);
+  document.querySelector('.board-bar').classList.toggle('editing', boardEditMode);
+  $('#boardModeBtn').textContent = boardEditMode ? '✓ Done' : '✏️ Edit wall';
+}
+
+function applyBoardZoom() {
+  boardZoom = Math.min(1.6, Math.max(0.4, boardZoom));
+  boardCanvas.style.transform = 'scale(' + boardZoom + ')';
+  boardCanvas.style.minWidth = (100 / boardZoom) + '%';
+  boardCanvas.style.minHeight = (100 / boardZoom) + '%';
+}
 
 function updateEmpty() {
   $('#boardEmpty').style.display = boardItems.length ? 'none' : '';
@@ -507,7 +544,10 @@ function growCanvasTo(minH, minW) {
 
 function refreshCanvasSize() {
   const b = measureContentBounds();
-  growCanvasTo(Math.max(board.clientHeight, b.bottom + CANVAS_PAD), Math.max(board.clientWidth, b.right + CANVAS_PAD));
+  growCanvasTo(
+    Math.max(board.clientHeight / boardZoom, b.bottom + CANVAS_PAD),
+    Math.max(board.clientWidth / boardZoom, b.right + CANVAS_PAD)
+  );
 }
 
 function makeBoardItem(rec) {
@@ -555,6 +595,7 @@ function makeBoardItem(rec) {
 
   /* drag to move */
   item.addEventListener('pointerdown', (e) => {
+    if (!boardEditMode) return;   // view mode: fingers scroll the wall instead
     if (e.target.closest('.p-del, .p-rotate, .p-resize, .polaroid-caption, video')) return;
     e.preventDefault();
     rec.z = ++boardMaxZ;
@@ -563,8 +604,8 @@ function makeBoardItem(rec) {
     const sx = e.clientX, sy = e.clientY, ox = rec.x, oy = rec.y;
     item.setPointerCapture(e.pointerId);
     const move = (ev) => {
-      rec.x = Math.max(4, ox + ev.clientX - sx);
-      rec.y = Math.max(4, oy + ev.clientY - sy);
+      rec.x = Math.max(4, ox + (ev.clientX - sx) / boardZoom);
+      rec.y = Math.max(4, oy + (ev.clientY - sy) / boardZoom);
       item.style.left = rec.x + 'px';
       item.style.top = rec.y + 'px';
       growCanvasTo(rec.y + item.offsetHeight + CANVAS_PAD, rec.x + item.offsetWidth + CANVAS_PAD);
@@ -582,6 +623,7 @@ function makeBoardItem(rec) {
 
   /* corner dot: resize (based on distance from the middle, so it works while rotated) */
   rez.addEventListener('pointerdown', (e) => {
+    if (!boardEditMode) return;
     e.preventDefault();
     e.stopPropagation();
     rez.setPointerCapture(e.pointerId);
@@ -603,6 +645,7 @@ function makeBoardItem(rec) {
 
   /* top handle: rotate around the middle */
   rot.addEventListener('pointerdown', (e) => {
+    if (!boardEditMode) return;
     e.preventDefault();
     e.stopPropagation();
     rot.setPointerCapture(e.pointerId);
@@ -630,7 +673,7 @@ function makeBoardItem(rec) {
 function sortBoard() {
   if (!boardItems.length) return;
   const gap = 22;
-  const bw = board.clientWidth;
+  const bw = board.clientWidth / boardZoom;
   let x = gap, y = gap, rowH = 0;
 
   for (const rec of boardItems) {
@@ -663,7 +706,7 @@ function sortBoard() {
 async function addBoardFiles(files) {
   const list = [...files].filter((f) => f.type.startsWith('image/') || f.type.startsWith('video/'));
   if (!list.length) return;
-  const bw = board.clientWidth;
+  const bw = board.clientWidth / boardZoom;
   let cursorY = boardItems.length ? measureLowestBottom() + 24 : 24;
   let added = 0, tooBig = 0;
   toast(list.length === 1 ? 'Uploading…' : 'Uploading ' + list.length + '…');
@@ -749,6 +792,36 @@ $('#bookFile').addEventListener('change', (e) => { addBookFiles(e.target.files);
 $('#addBoardPhotos').addEventListener('click', () => $('#boardFile').click());
 $('#boardFile').addEventListener('change', (e) => { addBoardFiles(e.target.files); e.target.value = ''; });
 $('#sortBoard').addEventListener('click', sortBoard);
+
+/* ===================== wall mode & zoom ===================== */
+
+$('#boardModeBtn').addEventListener('click', () => {
+  boardEditMode = !boardEditMode;
+  applyBoardMode();
+});
+$('#zoomInBoard').addEventListener('click', () => { boardZoom += 0.2; applyBoardZoom(); refreshCanvasSize(); });
+$('#zoomOutBoard').addEventListener('click', () => { boardZoom -= 0.2; applyBoardZoom(); refreshCanvasSize(); });
+applyBoardMode();
+
+/* pinch to zoom on touch screens */
+let pinchDist = 0, pinchZoom0 = 1;
+board.addEventListener('touchstart', (e) => {
+  if (e.touches.length === 2) {
+    pinchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    pinchZoom0 = boardZoom;
+  }
+}, { passive: true });
+board.addEventListener('touchmove', (e) => {
+  if (e.touches.length === 2 && pinchDist > 0) {
+    e.preventDefault();
+    const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    boardZoom = pinchZoom0 * (d / pinchDist);
+    applyBoardZoom();
+  }
+}, { passive: false });
+board.addEventListener('touchend', () => {
+  if (pinchDist > 0) { pinchDist = 0; refreshCanvasSize(); }
+}, { passive: true });
 
 /* ===================== loading + live sync ===================== */
 

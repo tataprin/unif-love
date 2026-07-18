@@ -56,14 +56,17 @@
         <button id="addBookPhotos" class="pill-btn">+ Add photos &amp; videos</button>
         <button id="nextBtn" class="round-btn" aria-label="Next page">›</button>
       </div>
-      <p class="hint">tap pages to flip · drag a photo to reframe it · hover a photo for fit &amp; zoom · drop photos or videos anywhere</p>
+      <p class="hint">flip with the arrows or a swipe · drag a photo to choose its crop · buttons on the photo for fit &amp; zoom</p>
     </section>
 
     <section id="view-board" class="view">
       <div class="board-bar">
-        <button id="addBoardPhotos" class="pill-btn">+ Add photos &amp; videos</button>
-        <button id="sortBoard" class="pill-btn ghost">⇅ Tidy up</button>
-        <p class="hint">drag to move · corner dot to resize · top handle to spin · scroll for more room · drop photos or videos anywhere</p>
+        <button id="boardModeBtn" class="pill-btn">✏️ Edit wall</button>
+        <button id="zoomOutBoard" class="round-btn small" aria-label="Zoom out">−</button>
+        <button id="zoomInBoard" class="round-btn small" aria-label="Zoom in">+</button>
+        <button id="addBoardPhotos" class="pill-btn edit-only">+ Add photos &amp; videos</button>
+        <button id="sortBoard" class="pill-btn ghost edit-only">⇅ Tidy up</button>
+        <p class="hint">pinch or − + to zoom · tap ✏️ Edit wall to move, resize &amp; add</p>
       </div>
       <div id="board">
         <div id="boardCanvas"></div>
