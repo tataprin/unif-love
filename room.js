@@ -323,44 +323,60 @@ cardMessageEl.addEventListener('blur', async () => {
   await window.sb.from('settings').update({ value: text }).eq('key', 'card_message');
 });
 
-/* ===== the "No" button — playfully impossible to press ===== */
+/* ===== the "No" button — playfully impossible to press, and free to roam
+   the whole scene, not just the card ===== */
 
 const noPhrases = ['No', 'Nope', 'Are you sure?', 'Really?', 'Think again!', "You can't catch me", 'Pretty please?', 'Last chance…', 'Hmm, no.', 'Try again? ♥'];
 let noDodgeCount = 0;
+let noAwake = false;    // stays put like a normal button until the cursor first reaches it
 const noBtn = $('#noBtn');
-const openedCardEl = document.querySelector('.opened-card');
+const cardOverlayEl = $('#cardOverlay');
+
+function overlayBounds() {
+  const w = cardOverlayEl.clientWidth, h = cardOverlayEl.clientHeight;
+  const btnW = noBtn.offsetWidth || 90, btnH = noBtn.offsetHeight || 46;
+  const pad = 14;
+  return { w, h, btnW, btnH, pad };
+}
+
+function placeNoButtonPx(x, y) {
+  const { w, h, btnW, btnH, pad } = overlayBounds();
+  noBtn.style.left = Math.min(Math.max(x, pad), w - btnW - pad) + 'px';
+  noBtn.style.top = Math.min(Math.max(y, pad), h - btnH - pad) + 'px';
+}
 
 function resetNoButton() {
   noDodgeCount = 0;
+  noAwake = false;
   noBtn.textContent = noPhrases[0];
-  placeNoButton(0.7, 0.78);
-}
-
-function placeNoButton(fx, fy) {
-  const cardW = openedCardEl.clientWidth, cardH = openedCardEl.clientHeight;
-  const btnW = noBtn.offsetWidth || 90, btnH = noBtn.offsetHeight || 46;
-  const pad = 12;
-  const x = Math.min(Math.max(fx * cardW - btnW / 2, pad), cardW - btnW - pad);
-  const y = Math.min(Math.max(fy * cardH - btnH / 2, pad), cardH - btnH - pad);
-  noBtn.style.left = x + 'px';
-  noBtn.style.top = y + 'px';
+  // start out looking like a completely normal, static button, right beside Yes
+  const overlayRect = cardOverlayEl.getBoundingClientRect();
+  const yesRect = $('#yesBtn').getBoundingClientRect();
+  placeNoButtonPx(yesRect.right - overlayRect.left + 18, yesRect.top - overlayRect.top + 5);
 }
 
 function dodgeNoButton() {
   noDodgeCount++;
   noBtn.textContent = noPhrases[Math.min(noDodgeCount, noPhrases.length - 1)];
-  placeNoButton(0.12 + Math.random() * 0.76, 0.14 + Math.random() * 0.72);
+  const { w, h, btnW, btnH, pad } = overlayBounds();
+  placeNoButtonPx(pad + Math.random() * Math.max(10, w - btnW - pad * 2), pad + Math.random() * Math.max(10, h - btnH - pad * 2));
 }
 
-openedCardEl.addEventListener('pointermove', (e) => {
-  if ($('#cardOverlay').classList.contains('hidden')) return;
+function wakeAndDodge() {
+  noAwake = true;
+  dodgeNoButton();
+}
+
+// stays put until the cursor actually reaches it for the first time — only then does it "wake up"
+cardOverlayEl.addEventListener('pointermove', (e) => {
+  if (cardOverlayEl.classList.contains('hidden') || !noAwake) return;
   const r = noBtn.getBoundingClientRect();
   const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-  if (Math.hypot(e.clientX - cx, e.clientY - cy) < 85) dodgeNoButton();
+  if (Math.hypot(e.clientX - cx, e.clientY - cy) < 95) dodgeNoButton();
 });
-noBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); dodgeNoButton(); });
-noBtn.addEventListener('pointerenter', () => dodgeNoButton());
-noBtn.addEventListener('click', (e) => { e.preventDefault(); dodgeNoButton(); });
+noBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); wakeAndDodge(); });
+noBtn.addEventListener('pointerenter', () => wakeAndDodge());
+noBtn.addEventListener('click', (e) => { e.preventDefault(); wakeAndDodge(); });
 
 /* ===== the "Yes" button ===== */
 

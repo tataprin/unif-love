@@ -471,8 +471,9 @@ main { flex: 1; display: flex; min-height: 0; }
 }
 .card-yes:hover { transform: translateY(-2px) scale(1.04); }
 .card-no {
-  position: absolute; z-index: 3;
+  position: absolute; z-index: 20;
   color: var(--pink-dark); background: #fff; border: 2px solid rgba(224, 80, 122, .3);
+  box-shadow: 0 6px 18px rgba(90, 30, 50, .25);
   transition: left .18s ease, top .18s ease, transform .15s ease;
 }
 
