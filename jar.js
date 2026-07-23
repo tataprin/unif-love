@@ -32,6 +32,7 @@ let audioCtx = null;
 
 let filterWho = 'all';
 let sortDesc = true;               // newest first by default
+let rangeFrom = '', rangeTo = '';  // 'YYYY-MM-DD' — empty means no limit on that side
 let currentWho = localStorage.getItem('jarWho') || '';
 
 /* ===================== scene setup ===================== */
@@ -542,12 +543,21 @@ function renderList() {
   const list = $('#jarList');
   list.innerHTML = '';
   let rows = notes.filter((n) => filterWho === 'all' || n.author === filterWho);
+  if (rangeFrom) {
+    const from = new Date(rangeFrom + 'T00:00:00');
+    rows = rows.filter((n) => new Date(n.created_at) >= from);
+  }
+  if (rangeTo) {
+    const to = new Date(rangeTo + 'T23:59:59.999');
+    rows = rows.filter((n) => new Date(n.created_at) <= to);
+  }
   rows = rows.slice().sort((a, b) => (new Date(a.created_at) - new Date(b.created_at)) * (sortDesc ? -1 : 1));
 
   if (!rows.length) {
-    const msg = filterWho === 'all'
-      ? 'the jar is waiting for its very first note ♥'
-      : 'no notes from ' + (filterWho === 'unif' ? 'Unif' : 'Tata') + ' yet ♥';
+    let msg;
+    if (rangeFrom || rangeTo) msg = 'no notes between those days — try different dates ♥';
+    else if (filterWho === 'all') msg = 'the jar is waiting for its very first note ♥';
+    else msg = 'no notes from ' + (filterWho === 'unif' ? 'Unif' : 'Tata') + ' yet ♥';
     list.appendChild(el('div', 'jar-empty', msg));
     return;
   }
@@ -566,10 +576,10 @@ function renderList() {
   }
 }
 
-document.querySelectorAll('.filter-chip').forEach((chip) => {
+document.querySelectorAll('.filter-chip[data-filter]').forEach((chip) => {
   chip.addEventListener('click', () => {
     filterWho = chip.dataset.filter;
-    document.querySelectorAll('.filter-chip').forEach((c) => c.classList.toggle('sel', c === chip));
+    document.querySelectorAll('.filter-chip[data-filter]').forEach((c) => c.classList.toggle('sel', c === chip));
     renderList();
   });
 });
@@ -577,6 +587,20 @@ document.querySelectorAll('.filter-chip').forEach((chip) => {
 $('#jarSortBtn').addEventListener('click', () => {
   sortDesc = !sortDesc;
   $('#jarSortBtn').textContent = sortDesc ? 'newest first ↓' : 'oldest first ↑';
+  renderList();
+});
+
+/* pick a stretch of days to look back on — only notes from those days show */
+function syncRangeClear() {
+  $('#jarRangeClear').classList.toggle('show', !!(rangeFrom || rangeTo));
+}
+$('#jarFrom').addEventListener('change', () => { rangeFrom = $('#jarFrom').value; syncRangeClear(); renderList(); });
+$('#jarTo').addEventListener('change', () => { rangeTo = $('#jarTo').value; syncRangeClear(); renderList(); });
+$('#jarRangeClear').addEventListener('click', () => {
+  rangeFrom = rangeTo = '';
+  $('#jarFrom').value = '';
+  $('#jarTo').value = '';
+  syncRangeClear();
   renderList();
 });
 

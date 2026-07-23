@@ -641,6 +641,18 @@ main { flex: 1; display: flex; min-height: 0; }
 .read-controls { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .filter-chips { display: flex; gap: 8px; flex-wrap: wrap; }
 .filter-chip, .sort-chip { font-size: 12.5px; padding: 7px 14px; }
+.range-row { flex-basis: 100%; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.range-label { font-family: var(--script); font-size: 19px; color: #9c5b70; }
+.range-input {
+  font-family: inherit; font-size: 12.5px; font-weight: 600;
+  padding: 6px 10px; border-radius: 999px;
+  border: 2px solid rgba(224, 80, 122, .35);
+  background: rgba(255, 255, 255, .85); color: var(--pink-dark);
+  outline: none; transition: border-color .2s;
+}
+.range-input:focus { border-color: var(--pink); }
+#jarRangeClear { display: none; }
+#jarRangeClear.show { display: inline-block; }
 .jar-list {
   flex: 1; min-height: 120px; overflow: auto;
   display: flex; flex-direction: column; gap: 14px;
