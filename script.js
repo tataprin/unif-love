@@ -126,25 +126,31 @@ function markLocalTouch(id) {
   setTimeout(() => locallyTouched.delete(id), 4000);
 }
 
+/* every image also has a small companion at `<path>_thumb` — the wall and the
+   room's frame show those, and book pages paint them first while the sharp
+   full picture downloads behind */
 async function attachUrls(recs) {
-  const missing = [];
+  const wants = [];   // { rec, key: 'url'|'thumbUrl', path }
   for (const rec of recs) {
     if (!rec.storagePath) continue;
-    const hit = getCachedUrl(rec.storagePath);
-    if (hit) rec.url = hit;
-    else missing.push(rec.storagePath);
+    wants.push({ rec, key: 'url', path: rec.storagePath });
+    if (rec.kind === 'image') wants.push({ rec, key: 'thumbUrl', path: rec.storagePath + '_thumb' });
+  }
+  const missing = [];
+  for (const w of wants) {
+    const hit = getCachedUrl(w.path);
+    if (hit) w.rec[w.key] = hit;
+    else if (!missing.includes(w.path)) missing.push(w.path);
   }
   if (!missing.length) return recs;
   const { data, error } = await sb.storage.from(BUCKET).createSignedUrls(missing, SIGNED_URL_TTL);
   if (error) { toast('Could not load pictures — check your connection'); return recs; }
-  const byPath = new Map(data.map((d) => [d.path, d]));
-  for (const rec of recs) {
-    if (rec.url) continue;
-    const d = byPath.get(rec.storagePath);
-    if (d && !d.error) {
-      rec.url = d.signedUrl;
-      rememberUrl(rec.storagePath, d.signedUrl);
-    }
+  const byPath = new Map();
+  data.forEach((d, i) => { if (!d.error && d.signedUrl) byPath.set(d.path || missing[i], d.signedUrl); });
+  for (const w of wants) {
+    if (w.rec[w.key]) continue;
+    const url = byPath.get(w.path);
+    if (url) { w.rec[w.key] = url; rememberUrl(w.path, url); }
   }
   persistUrlCache();
   return recs;
@@ -158,6 +164,12 @@ async function cloudAdd(store, rec) {
     cacheControl: '31536000',   // paths are UUIDs, content never changes — cache hard
   });
   if (upErr) throw upErr;
+
+  if (rec.thumbBlob) {          // best effort — the full image still works without it
+    await sb.storage.from(BUCKET).upload(path + '_thumb', rec.thumbBlob, {
+      contentType: 'image/jpeg', cacheControl: '31536000',
+    });
+  }
 
   const payload = { kind: rec.kind, caption: rec.caption || '', storage_path: path, content_type: blob.type || null };
   if (store === 'book') {
@@ -193,7 +205,11 @@ async function cloudPut(store, rec) {
 async function cloudDelete(store, rec) {
   markLocalTouch(rec.id);
   await sb.from(store).delete().eq('id', rec.id);
-  if (rec.storagePath) await sb.storage.from(BUCKET).remove([rec.storagePath]);
+  if (rec.storagePath) {
+    const paths = [rec.storagePath];
+    if (rec.kind === 'image') paths.push(rec.storagePath + '_thumb');
+    await sb.storage.from(BUCKET).remove(paths);
+  }
 }
 
 async function cloudAll(store) {
@@ -278,6 +294,7 @@ function pageNode(def, side) {
     const frame = el('div', 'photo-frame');
     const img = el('img');
     img.dataset.src = photo.url;    // fetched only once the reader flips near this page
+    if (photo.thumbUrl) img.dataset.thumb = photo.thumbUrl;
     img.decoding = 'async';
     img.alt = '';
     img.draggable = false;
@@ -422,9 +439,22 @@ function applyZ() {
    only fetches its picture when the reader flips within a couple of sheets */
 function loadSheetMedia(sheet) {
   sheet.querySelectorAll('img[data-src], video[data-src]').forEach((m) => {
-    if (m.tagName === 'VIDEO') m.preload = 'metadata';
-    m.src = m.dataset.src;
+    const full = m.dataset.src;
+    const thumb = m.dataset.thumb;
     delete m.dataset.src;
+    delete m.dataset.thumb;
+    if (m.tagName === 'VIDEO') {
+      m.preload = 'metadata';
+      m.src = full;
+    } else if (thumb) {
+      // the small version paints almost instantly; the sharp one replaces it when ready
+      m.src = thumb;
+      const hi = new Image();
+      hi.onload = () => { m.src = full; };
+      hi.src = full;
+    } else {
+      m.src = full;
+    }
   });
 }
 
@@ -509,7 +539,8 @@ async function addBookFiles(files) {
         bookPhotos.push(rec);
       } else {
         const blob = await shrink(f);
-        const rec = await cloudAdd('book', { kind: 'image', blob, caption: '', fit: 'cover', scale: 1, posX: 50, posY: 50 });
+        const thumbBlob = await shrink(f, 800, 0.78);
+        const rec = await cloudAdd('book', { kind: 'image', blob, thumbBlob, caption: '', fit: 'cover', scale: 1, posX: 50, posY: 50 });
         bookPhotos.push(rec);
       }
       added++;
@@ -648,7 +679,7 @@ function makeBoardItem(rec) {
     media = el('img');
     media.loading = 'lazy';         // pictures far down the wall wait until scrolled near
     media.decoding = 'async';
-    media.src = rec.url;
+    media.src = rec.thumbUrl || rec.url;   // polaroids are small — the thumb is plenty
     media.alt = '';
     media.draggable = false;
   }
@@ -797,9 +828,11 @@ async function addBoardFiles(files) {
     try {
       const w = Math.round(180 + Math.random() * 90);
       const blob = isVideo ? f : await shrink(f, 1200, 0.85);
+      const thumbBlob = isVideo ? null : await shrink(f, 520, 0.78);
       const rec = await cloudAdd('board', {
         kind: isVideo ? 'video' : 'image',
         blob,
+        thumbBlob,
         caption: '',
         x: Math.round(24 + Math.random() * Math.max(1, bw - w - 60)),
         y: Math.round(cursorY + Math.random() * 40),

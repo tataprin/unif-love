@@ -55,7 +55,7 @@ async function startRoom() {
   buildDecor();
   buildGlasses();
   buildCard();
-  buildFrame();     // the frame's photo arrives in the background — the room never waits for it
+  const frameReady = buildFrame();
 
   raycaster = new THREE.Raycaster();
   pointer = new THREE.Vector2();
@@ -68,8 +68,11 @@ async function startRoom() {
   canvas.addEventListener('pointermove', onCanvasHover);
   // no click-outside-to-close on purpose — Yes is the only way out
 
-  $('#roomLoading').classList.add('hidden');
   animate();
+  // hold the curtain until the frame's photo is truly in place — it's a small
+  // thumbnail now so this is quick, and 8s caps it so it can never hang forever
+  Promise.race([frameReady, new Promise((r) => setTimeout(r, 8000))])
+    .then(() => $('#roomLoading').classList.add('hidden'));
 }
 
 function onResize() {
@@ -500,14 +503,14 @@ async function resolveFramePhotoUrl() {
   try {
     const { data: setting } = await sb.from('settings').select('value').eq('key', 'frame_photo_path').maybeSingle();
     if (setting && setting.value) {
-      const url = await window.signedUrlFor(setting.value);
+      const url = (await window.signedUrlFor(setting.value + '_thumb')) || (await window.signedUrlFor(setting.value));
       if (url) return url;
     }
   } catch (e) { /* no custom photo chosen yet */ }
   try {
     const { data: rows } = await sb.from('book').select('storage_path').order('created_at', { ascending: false }).limit(1);
     if (rows && rows[0]) {
-      const url = await window.signedUrlFor(rows[0].storage_path);
+      const url = (await window.signedUrlFor(rows[0].storage_path + '_thumb')) || (await window.signedUrlFor(rows[0].storage_path));
       if (url) return url;
     }
   } catch (e) { /* no book photo either */ }
@@ -541,7 +544,7 @@ function buildFrame() {
   photo.position.z = 0.016;
   group.add(photo);
   framePhotoMesh = photo;
-  resolveFramePhotoUrl().then((url) => applyFrameTexture(url)).catch(() => { /* placeholder stays */ });
+  const ready = resolveFramePhotoUrl().then((url) => applyFrameTexture(url)).catch(() => { /* placeholder stays */ });
 
   const stand = new THREE.Mesh(
     new THREE.BoxGeometry(0.04, 0.32, 0.04),
@@ -556,6 +559,7 @@ function buildFrame() {
   group.rotation.x = -0.08;
   scene.add(group);
   frameGroup = group;
+  return ready;
 }
 
 async function changeFramePhoto(file) {
@@ -565,6 +569,8 @@ async function changeFramePhoto(file) {
     const sb = window.sb;
     const { error: upErr } = await sb.storage.from(window.BUCKET).upload(path, blob, { contentType: 'image/jpeg', cacheControl: '31536000' });
     if (upErr) throw upErr;
+    const thumbBlob = await window.shrink(file, 800, 0.78);
+    await sb.storage.from(window.BUCKET).upload(path + '_thumb', thumbBlob, { contentType: 'image/jpeg', cacheControl: '31536000' });
     const { error: setErr } = await sb
       .from('settings')
       .upsert({ key: 'frame_photo_path', value: path }, { onConflict: 'key' });
