@@ -30,7 +30,12 @@ async function startRoom() {
   const canvas = $('#roomCanvas');
   const container = $('#roomScene');
 
-  renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  } catch (e) {
+    $('#roomLoading').textContent = 'this little room needs a newer phone ♥';
+    return;
+  }
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
 
@@ -50,7 +55,7 @@ async function startRoom() {
   buildDecor();
   buildGlasses();
   buildCard();
-  await buildFrame();
+  buildFrame();     // the frame's photo arrives in the background — the room never waits for it
 
   raycaster = new THREE.Raycaster();
   pointer = new THREE.Vector2();
@@ -495,15 +500,15 @@ async function resolveFramePhotoUrl() {
   try {
     const { data: setting } = await sb.from('settings').select('value').eq('key', 'frame_photo_path').maybeSingle();
     if (setting && setting.value) {
-      const { data: signed } = await sb.storage.from(window.BUCKET).createSignedUrl(setting.value, 3600);
-      if (signed) return signed.signedUrl;
+      const url = await window.signedUrlFor(setting.value);
+      if (url) return url;
     }
   } catch (e) { /* no custom photo chosen yet */ }
   try {
     const { data: rows } = await sb.from('book').select('storage_path').order('created_at', { ascending: false }).limit(1);
     if (rows && rows[0]) {
-      const { data: signed } = await sb.storage.from(window.BUCKET).createSignedUrl(rows[0].storage_path, 3600);
-      if (signed) return signed.signedUrl;
+      const url = await window.signedUrlFor(rows[0].storage_path);
+      if (url) return url;
     }
   } catch (e) { /* no book photo either */ }
   return null;
@@ -519,7 +524,7 @@ async function applyFrameTexture(url) {
   currentFramePhotoUrl = url;
 }
 
-async function buildFrame() {
+function buildFrame() {
   const group = new THREE.Group();
 
   const border = new THREE.Mesh(
@@ -528,20 +533,15 @@ async function buildFrame() {
   );
   group.add(border);
 
-  const url = await resolveFramePhotoUrl();
-  let photoMat;
-  if (url) {
-    const texture = await new THREE.TextureLoader().loadAsync(url);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    photoMat = new THREE.MeshBasicMaterial({ map: texture });
-    currentFramePhotoUrl = url;
-  } else {
-    photoMat = new THREE.MeshStandardMaterial({ color: 0xffd9e6 });
-  }
-  const photo = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.54), photoMat);
+  // a soft pink placeholder first; the real photo fades in whenever it arrives
+  const photo = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.42, 0.54),
+    new THREE.MeshStandardMaterial({ color: 0xffd9e6 })
+  );
   photo.position.z = 0.016;
   group.add(photo);
   framePhotoMesh = photo;
+  resolveFramePhotoUrl().then((url) => applyFrameTexture(url)).catch(() => { /* placeholder stays */ });
 
   const stand = new THREE.Mesh(
     new THREE.BoxGeometry(0.04, 0.32, 0.04),
@@ -563,16 +563,16 @@ async function changeFramePhoto(file) {
     const blob = await window.shrink(file, 1000, 0.85);
     const path = 'frame/' + crypto.randomUUID();
     const sb = window.sb;
-    const { error: upErr } = await sb.storage.from(window.BUCKET).upload(path, blob, { contentType: 'image/jpeg' });
+    const { error: upErr } = await sb.storage.from(window.BUCKET).upload(path, blob, { contentType: 'image/jpeg', cacheControl: '31536000' });
     if (upErr) throw upErr;
     const { error: setErr } = await sb
       .from('settings')
       .upsert({ key: 'frame_photo_path', value: path }, { onConflict: 'key' });
     if (setErr) throw setErr;
-    const { data: signed } = await sb.storage.from(window.BUCKET).createSignedUrl(path, 3600);
-    if (signed) {
-      await applyFrameTexture(signed.signedUrl);
-      if (framePreviewOpen) $('#framePreviewImg').src = signed.signedUrl;
+    const url = await window.signedUrlFor(path);
+    if (url) {
+      await applyFrameTexture(url);
+      if (framePreviewOpen) $('#framePreviewImg').src = url;
     }
   } catch (e) {
     // silently ignore — the frame just keeps its current photo

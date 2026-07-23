@@ -53,12 +53,47 @@ const SUPABASE_URL = 'https://cipxuiszpafwhgnyprzj.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNpcHh1aXN6cGFmd2hnbnlwcnpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQzMTExNTQsImV4cCI6MjA5OTg4NzE1NH0.tHvJjo0hRBoxg03Qckmme2T4L9AzfSf7aFEhmWJ_p0o';
 const SHARED_EMAIL = 'hello@unif.love';
 const BUCKET = 'memories';
-const SIGNED_URL_TTL = 6 * 60 * 60; // 6 hours — long enough for a normal visit
+const SIGNED_URL_TTL = 7 * 24 * 60 * 60; // 7 days — long-lived so pictures stay browser-cached between visits
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 window.sb = sb;          // shared with room.js so it doesn't need its own session
 window.BUCKET = BUCKET;
 window.shrink = shrink;
+
+/* Signed URLs are kept in localStorage and reused between visits — minting a
+   fresh URL every login made every photo look brand-new to the browser, so
+   nothing was ever served from its cache and everything re-downloaded. */
+const URL_CACHE_KEY = 'urlCache.v1';
+let urlCache = {};
+try {
+  urlCache = JSON.parse(localStorage.getItem(URL_CACHE_KEY)) || {};
+  for (const k of Object.keys(urlCache)) {
+    if (!urlCache[k] || urlCache[k].exp - Date.now() < 10 * 60 * 1000) delete urlCache[k];
+  }
+} catch (e) { urlCache = {}; }
+
+function getCachedUrl(path) {
+  const entry = urlCache[path];
+  return entry ? entry.url : null;   // expired entries were pruned at load
+}
+
+function rememberUrl(path, url) {
+  urlCache[path] = { url, exp: Date.now() + SIGNED_URL_TTL * 1000 };
+}
+
+function persistUrlCache() {
+  try { localStorage.setItem(URL_CACHE_KEY, JSON.stringify(urlCache)); } catch (e) { /* best effort */ }
+}
+
+window.signedUrlFor = async (path) => {
+  const hit = getCachedUrl(path);
+  if (hit) return hit;
+  const { data } = await sb.storage.from(BUCKET).createSignedUrl(path, SIGNED_URL_TTL);
+  if (!data) return null;
+  rememberUrl(path, data.signedUrl);
+  persistUrlCache();
+  return data.signedUrl;
+};
 
 function rowToRec(store, row) {
   const rec = {
@@ -92,15 +127,26 @@ function markLocalTouch(id) {
 }
 
 async function attachUrls(recs) {
-  const paths = recs.map((r) => r.storagePath).filter(Boolean);
-  if (!paths.length) return recs;
-  const { data, error } = await sb.storage.from(BUCKET).createSignedUrls(paths, SIGNED_URL_TTL);
+  const missing = [];
+  for (const rec of recs) {
+    if (!rec.storagePath) continue;
+    const hit = getCachedUrl(rec.storagePath);
+    if (hit) rec.url = hit;
+    else missing.push(rec.storagePath);
+  }
+  if (!missing.length) return recs;
+  const { data, error } = await sb.storage.from(BUCKET).createSignedUrls(missing, SIGNED_URL_TTL);
   if (error) { toast('Could not load pictures — check your connection'); return recs; }
   const byPath = new Map(data.map((d) => [d.path, d]));
   for (const rec of recs) {
+    if (rec.url) continue;
     const d = byPath.get(rec.storagePath);
-    if (d && !d.error) rec.url = d.signedUrl;
+    if (d && !d.error) {
+      rec.url = d.signedUrl;
+      rememberUrl(rec.storagePath, d.signedUrl);
+    }
   }
+  persistUrlCache();
   return recs;
 }
 
@@ -109,6 +155,7 @@ async function cloudAdd(store, rec) {
   const path = store + '/' + crypto.randomUUID();
   const { error: upErr } = await sb.storage.from(BUCKET).upload(path, blob, {
     contentType: blob.type || 'application/octet-stream',
+    cacheControl: '31536000',   // paths are UUIDs, content never changes — cache hard
   });
   if (upErr) throw upErr;
 
@@ -206,10 +253,10 @@ function pageNode(def, side) {
     const video = def.photo;
     const frame = el('div', 'photo-frame video-frame');
     const vid = el('video');
-    vid.src = video.url;
+    vid.dataset.src = video.url;    // fetched only once the reader flips near this page
     vid.controls = true;
     vid.playsInline = true;
-    vid.preload = 'metadata';
+    vid.preload = 'none';
     frame.appendChild(vid);
 
     const del = el('button', 'photo-del', '✕');
@@ -230,7 +277,8 @@ function pageNode(def, side) {
 
     const frame = el('div', 'photo-frame');
     const img = el('img');
-    img.src = photo.url;
+    img.dataset.src = photo.url;    // fetched only once the reader flips near this page
+    img.decoding = 'async';
     img.alt = '';
     img.draggable = false;
     frame.appendChild(img);
@@ -370,12 +418,29 @@ function applyZ() {
   });
 }
 
+/* the whole book used to download the moment you logged in — now each page
+   only fetches its picture when the reader flips within a couple of sheets */
+function loadSheetMedia(sheet) {
+  sheet.querySelectorAll('img[data-src], video[data-src]').forEach((m) => {
+    if (m.tagName === 'VIDEO') m.preload = 'metadata';
+    m.src = m.dataset.src;
+    delete m.dataset.src;
+  });
+}
+
+function loadNearSheets() {
+  const from = Math.max(0, flipCount - 2);
+  const to = Math.min(sheetEls.length - 1, flipCount + 1);
+  for (let i = from; i <= to; i++) loadSheetMedia(sheetEls[i]);
+}
+
 function applyFlips() {
   const N = sheetEls.length;
   sheetEls.forEach((s, i) => s.classList.toggle('flipped', i < flipCount));
   bookEl.classList.toggle('closed', flipCount === 0);
   bookEl.classList.toggle('finished', N > 0 && flipCount === N);
   applyZ();
+  loadNearSheets();
   $('#prevBtn').disabled = flipCount === 0;
   $('#nextBtn').disabled = flipCount === N;
 
@@ -581,6 +646,8 @@ function makeBoardItem(rec) {
     media.addEventListener('loadedmetadata', () => growCanvasTo(rec.y + item.offsetHeight + CANVAS_PAD, rec.x + item.offsetWidth + CANVAS_PAD));
   } else {
     media = el('img');
+    media.loading = 'lazy';         // pictures far down the wall wait until scrolled near
+    media.decoding = 'async';
     media.src = rec.url;
     media.alt = '';
     media.draggable = false;
