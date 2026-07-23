@@ -528,13 +528,162 @@ main { flex: 1; display: flex; min-height: 0; }
   box-shadow: 0 4px 10px rgba(90, 20, 45, .35);
 }
 
+/* ---------- the memory jar ---------- */
+#view-jar { align-items: center; gap: 10px; padding: 10px 16px 18px; }
+.jar-scene {
+  position: relative; flex: 1; width: 100%; min-height: 0;
+  border-radius: 20px; overflow: hidden;
+  background: linear-gradient(180deg, #f8d9e3 0%, #fdece7 60%, #fff3ea 100%);
+  box-shadow: inset 0 2px 18px rgba(178, 58, 96, .12);
+}
+#jarCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.jar-bar {
+  position: absolute; left: 0; right: 0; bottom: 16px; z-index: 4;
+  display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;
+  pointer-events: none;
+}
+.jar-bar .pill-btn { pointer-events: auto; }
+
+.jar-overlay {
+  position: absolute; inset: 0; z-index: 6;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(90, 30, 50, .3); backdrop-filter: blur(3px);
+  padding: 16px;
+  opacity: 1; transition: opacity .35s ease, visibility .35s ease;
+}
+.jar-overlay.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+
+.jar-close {
+  position: absolute; top: -13px; right: -13px; z-index: 2;
+  width: 30px; height: 30px; border-radius: 50%; border: 2px solid #fff;
+  background: var(--pink-dark); color: #fff; font-size: 12px; cursor: pointer;
+  box-shadow: 0 4px 10px rgba(90, 20, 45, .35);
+}
+
+.note-title { font-family: var(--script); font-size: clamp(21px, 4vw, 27px); color: var(--rose-deep); text-align: center; }
+
+/* the letter paper you write on */
+.note-paper {
+  position: relative;
+  width: min(430px, 94%);
+  padding: 26px 24px 22px;
+  border-radius: 14px;
+  background:
+    repeating-linear-gradient(transparent 0px 30px, rgba(224, 80, 122, .12) 30px 31px),
+    var(--paper);
+  box-shadow: 0 24px 60px rgba(90, 20, 45, .35);
+  display: flex; flex-direction: column; gap: 14px;
+  transform: rotate(-.6deg);
+  animation: card-pop .4s cubic-bezier(.2, .9, .3, 1.3);
+}
+.note-paper.folding { animation: paper-fold 1.05s cubic-bezier(.55, .06, .4, 1) forwards; pointer-events: none; overflow: hidden; }
+@keyframes paper-fold {
+  0%   { transform: perspective(800px) rotate(-.6deg); opacity: 1; }
+  38%  { transform: perspective(800px) rotateX(72deg) scaleY(.55); opacity: 1; }
+  62%  { transform: perspective(800px) rotateX(72deg) scaleY(.3) scaleX(.5); opacity: 1; }
+  100% { transform: perspective(800px) translateY(16vh) rotateX(78deg) scale(.05); opacity: 0; }
+}
+
+.who-row { display: flex; align-items: center; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.who-from { font-family: var(--script); font-size: 20px; color: #9c5b70; }
+.who-chip {
+  font-family: inherit; font-weight: 700; font-size: 14px;
+  padding: 9px 20px; border-radius: 999px; cursor: pointer;
+  border: 2px solid rgba(224, 80, 122, .35);
+  background: rgba(255, 255, 255, .85); color: var(--pink-dark);
+  transition: background .2s, color .2s, transform .15s, box-shadow .2s;
+}
+.who-chip:hover { transform: translateY(-1px); }
+.who-chip.sel {
+  color: #fff; background: linear-gradient(135deg, #ef6a92, var(--pink-dark));
+  border-color: transparent; box-shadow: 0 6px 16px rgba(224, 80, 122, .4);
+}
+#noteText {
+  width: 100%; min-height: 150px; resize: vertical;
+  border: none; outline: none; background: transparent;
+  font-family: var(--script); font-size: 21px; line-height: 31px; color: var(--rose-deep);
+  padding: 0 4px;
+}
+#noteText::placeholder { color: rgba(156, 91, 112, .45); font-style: italic; }
+#noteSend { align-self: center; }
+
+/* the jar's little padlock */
+.lock-card {
+  position: relative; width: min(340px, 92%);
+  padding: 28px 24px 18px; border-radius: 18px;
+  background: var(--paper);
+  box-shadow: 0 24px 60px rgba(90, 20, 45, .35);
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  text-align: center;
+  animation: card-pop .4s cubic-bezier(.2, .9, .3, 1.3);
+}
+.lock-emoji { font-size: 34px; }
+.lock-card .gate-input { margin: 0; width: min(240px, 90%); }
+.lock-card .gate-error { margin-top: 0; }
+.lock-card.shake { animation: lock-shake .4s ease; }
+@keyframes lock-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-9px); }
+  40% { transform: translateX(8px); }
+  60% { transform: translateX(-6px); }
+  80% { transform: translateX(4px); }
+}
+
+/* reading everything inside */
+.read-card {
+  position: relative; width: min(520px, 96%); max-height: 92%; min-height: 0;
+  padding: 24px 20px 14px; border-radius: 18px;
+  background: var(--paper);
+  box-shadow: 0 24px 60px rgba(90, 20, 45, .35);
+  display: flex; flex-direction: column; gap: 14px;
+  animation: card-pop .4s cubic-bezier(.2, .9, .3, 1.3);
+}
+.read-controls { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.filter-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.filter-chip, .sort-chip { font-size: 12.5px; padding: 7px 14px; }
+.jar-list {
+  flex: 1; min-height: 120px; overflow: auto;
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 8px 6px 10px;
+}
+.jar-note {
+  position: relative;
+  padding: 14px 16px 10px;
+  border-radius: 4px;
+  background:
+    repeating-linear-gradient(transparent 0 26px, rgba(224, 80, 122, .1) 26px 27px),
+    #fffdf8;
+  box-shadow: 0 4px 12px rgba(90, 40, 60, .14);
+}
+.jar-note:nth-child(odd)  { transform: rotate(-.4deg); }
+.jar-note:nth-child(even) { transform: rotate(.5deg); }
+.jar-note::before {                       /* washi tape, like the wall */
+  content: ''; position: absolute; top: -8px; left: 18px;
+  width: 52px; height: 16px;
+  background: rgba(255, 197, 214, .8);
+  transform: rotate(-3deg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .1);
+}
+.jar-note.from-tata::before { background: rgba(255, 224, 178, .85); }
+.jar-note-text {
+  font-family: var(--script); font-size: 21px; line-height: 1.45; color: var(--rose-deep);
+  white-space: pre-wrap; word-break: break-word;
+}
+.jar-note-meta { margin-top: 8px; font-size: 12px; font-weight: 600; color: rgba(122, 74, 90, .75); text-align: right; }
+.jar-note-who { font-weight: 700; color: var(--pink-dark); }
+.jar-note.from-tata .jar-note-who { color: #b07423; }
+.jar-empty {
+  text-align: center; font-family: var(--script); font-size: 22px;
+  color: rgba(178, 58, 96, .45); padding: 30px 10px;
+}
+
 /* ---------- small screens ---------- */
 @media (max-width: 560px) {
   :root { --pw: min(46vw, 40vh); }   /* a roomier book on phone screens */
 
   header { padding: 10px 14px; flex-wrap: wrap; justify-content: center; gap: 8px; }
   .logo { font-size: 26px; }
-  nav { gap: 4px; padding: 4px; }
+  nav { gap: 4px; padding: 4px; flex-wrap: wrap; justify-content: center; }
   .nav-btn { padding: 7px 11px; font-size: 12px; white-space: nowrap; }
   .hint { font-size: 11px; padding: 0 8px; }
   .pill-btn { font-size: 13.5px; padding: 11px 18px; }
@@ -554,4 +703,10 @@ main { flex: 1; display: flex; min-height: 0; }
   .opened-card { padding: 26px 18px 20px; gap: 18px; min-height: 220px; }
   .card-message { font-size: 18px; min-height: 56px; }
   .card-yes, .card-no { padding: 11px 22px; font-size: 14px; }
+
+  .jar-bar { bottom: 10px; gap: 8px; }
+  .note-paper { padding: 20px 16px 16px; }
+  #noteText { font-size: 18px; line-height: 27px; min-height: 120px; }
+  .jar-note-text { font-size: 18px; }
+  .read-card { padding: 18px 14px 12px; }
 }

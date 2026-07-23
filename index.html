@@ -42,6 +42,7 @@
       <button class="nav-btn active" data-view="book">Our Book</button>
       <button class="nav-btn" data-view="board">Our Wall</button>
       <button class="nav-btn" data-view="surprise">✨ Surprise</button>
+      <button class="nav-btn" data-view="jar">🫙 Memory Jar</button>
     </nav>
   </header>
 
@@ -98,6 +99,60 @@
       </div>
       <p class="hint">tap the card to open it · tap the frame to look closer · tap around, everything loves attention ♥</p>
     </section>
+
+    <section id="view-jar" class="view">
+      <div class="jar-scene" id="jarScene">
+        <canvas id="jarCanvas"></canvas>
+        <div id="jarLoading" class="room-loading">dusting off the jar…</div>
+
+        <div class="jar-bar">
+          <button id="writeNoteBtn" class="pill-btn">✍️ Write a memory</button>
+          <button id="openJarBtn" class="pill-btn ghost">🔓 Open the jar</button>
+        </div>
+
+        <div id="notePopup" class="jar-overlay hidden">
+          <div class="note-paper" id="notePaper">
+            <button type="button" id="noteClose" class="jar-close">✕</button>
+            <div class="note-title">a little note for our jar</div>
+            <div class="who-row">
+              <span class="who-from">from</span>
+              <button type="button" class="who-chip" data-who="unif">Unif ♥</button>
+              <button type="button" class="who-chip" data-who="tata">Tata ♥</button>
+            </div>
+            <textarea id="noteText" maxlength="2000" placeholder="write anything… a memory, a feeling, a tiny secret ♥"></textarea>
+            <button type="button" id="noteSend" class="pill-btn">Send to the jar ♥</button>
+          </div>
+        </div>
+
+        <div id="jarLock" class="jar-overlay hidden">
+          <form id="jarLockForm" class="lock-card">
+            <button type="button" id="lockClose" class="jar-close">✕</button>
+            <div class="lock-emoji">🔒</div>
+            <div class="note-title">the jar keeps our secrets…</div>
+            <input id="jarPass" class="gate-input" type="password" autocomplete="off" placeholder="the jar's password" required>
+            <button type="submit" class="pill-btn">Open the jar ♥</button>
+            <p id="jarLockError" class="gate-error"></p>
+          </form>
+        </div>
+
+        <div id="jarRead" class="jar-overlay hidden">
+          <div class="read-card">
+            <button type="button" id="readClose" class="jar-close">✕</button>
+            <div class="note-title">everything in our jar</div>
+            <div class="read-controls">
+              <div class="filter-chips">
+                <button type="button" class="who-chip filter-chip sel" data-filter="all">All</button>
+                <button type="button" class="who-chip filter-chip" data-filter="unif">Unif ♥</button>
+                <button type="button" class="who-chip filter-chip" data-filter="tata">Tata ♥</button>
+              </div>
+              <button type="button" id="jarSortBtn" class="who-chip sort-chip">newest first ↓</button>
+            </div>
+            <div id="jarList" class="jar-list"></div>
+          </div>
+        </div>
+      </div>
+      <p class="hint">our virtual memory jar · tap ✍️ to drop a little note in · opening it needs the magic word ♥</p>
+    </section>
   </main>
 
   <canvas id="fxCanvas"></canvas>
@@ -109,5 +164,6 @@
 
   <script src="script.js"></script>
   <script src="room.js"></script>
+  <script src="jar.js"></script>
 </body>
 </html>
