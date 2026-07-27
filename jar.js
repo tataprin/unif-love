@@ -10,7 +10,11 @@ const $ = (sel) => document.querySelector(sel);
 
 const JAR_PASSWORD = 'jar123';
 const LID_Y = 1.44;
-const MAX_PILE = 110;              // the 3D pile stops growing past this; the list never does
+const RENDER_CAP = 300;            // we render up to this many little papers; the list always has them all
+const LAYER_SIZE = 6;             // roughly this many notes settle into each layer of the pile
+const NATURAL_GAP = 0.052;         // the gap between layers when the jar is roomy…
+const PILE_BASE_Y = 0.09;          // …the pile starts just above the glass bottom…
+const PILE_TOP_Y = 1.12;           // …and no matter how many notes, it settles below the neck
 const NOTE_COLORS = [0xfffaf4, 0xffeef7, 0xfff3e2, 0xffe4ee, 0xf3ecff];
 
 let started = false;
@@ -242,14 +246,22 @@ function rand01(seed) {
   return x - Math.floor(x);
 }
 
+/* the more notes there are, the gently the layers hug together — so the pile
+   keeps filling upward but always settles below the neck instead of overflowing */
+function pileGap() {
+  const layers = Math.max(1, Math.ceil(Math.min(notes.length, RENDER_CAP) / LAYER_SIZE) - 1);
+  return Math.min(NATURAL_GAP, (PILE_TOP_Y - PILE_BASE_Y) / layers);
+}
+
 function pileSpot(i) {
-  const layer = Math.floor(i / 6);
+  const gap = pileGap();
+  const layer = Math.floor(i / LAYER_SIZE);
   const a = rand01(i * 3 + 1) * Math.PI * 2;
   const r = Math.sqrt(rand01(i * 3 + 2)) * 0.34;
   return {
     x: Math.cos(a) * r,
     z: Math.sin(a) * r,
-    y: 0.1 + layer * 0.052 + rand01(i * 3 + 3) * 0.015,
+    y: PILE_BASE_Y + layer * gap + rand01(i * 3 + 3) * Math.min(0.015, gap * 0.3),
     rx: (rand01(i * 7 + 5) - 0.5) * 0.5,
     ry: rand01(i * 7 + 4) * Math.PI * 2,
     rz: (rand01(i * 7 + 6) - 0.5) * 0.5,
@@ -259,6 +271,7 @@ function pileSpot(i) {
 function makeNoteMesh(i) {
   const mat = new THREE.MeshStandardMaterial({ color: NOTE_COLORS[i % NOTE_COLORS.length], roughness: 0.9 });
   const m = new THREE.Mesh(noteGeo, mat);
+  m.userData.i = i;
   const s = pileSpot(i);
   m.position.set(s.x, s.y, s.z);
   m.rotation.set(s.rx, s.ry, s.rz);
@@ -271,16 +284,30 @@ function buildNotePile() {
     notesGroup.remove(child);
     child.material.dispose();
   }
-  const n = Math.min(notes.length, MAX_PILE);
+  const n = Math.min(notes.length, RENDER_CAP);
   for (let i = 0; i < n; i++) notesGroup.add(makeNoteMesh(i));
+}
+
+/* as new notes arrive the layers hug a touch closer — nudge the papers already
+   resting inside down to their new snug height so nothing pokes out the top */
+function relayoutPile() {
+  if (!sceneReady) return;
+  const falling = new Map(drops.map((d) => [d.mesh, d]));
+  for (const mesh of notesGroup.children) {
+    const s = pileSpot(mesh.userData.i);
+    const d = falling.get(mesh);
+    if (d) d.targetY = s.y;                 // still tumbling in — just move where it's headed
+    else mesh.position.y = s.y;
+  }
 }
 
 /* a freshly sent note tumbles in from above while the lid cracks open */
 function dropNewNote() {
   if (!sceneReady) return;
   peekLid();
-  if (notes.length > MAX_PILE) return;   // jar looks full — the list still has everything
+  relayoutPile();                        // the resting papers settle to make room for one more
   const i = notes.length - 1;
+  if (i >= RENDER_CAP) return;           // an overflowing-full jar — the list still keeps every note
   const mesh = makeNoteMesh(i);
   const targetY = mesh.position.y;
   mesh.position.y = 2.5;
