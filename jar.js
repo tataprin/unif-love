@@ -253,11 +253,15 @@ function pileGap() {
   return Math.min(NATURAL_GAP, (PILE_TOP_Y - PILE_BASE_Y) / layers);
 }
 
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));   // ~137.5° — each note lands a turn away from the last
+
 function pileSpot(i) {
   const gap = pileGap();
   const layer = Math.floor(i / LAYER_SIZE);
-  const a = rand01(i * 3 + 1) * Math.PI * 2;
-  const r = Math.sqrt(rand01(i * 3 + 2)) * 0.34;
+  // spiral the notes around by the golden angle so new ones never cluster on one side,
+  // with a touch of jitter so the pile still looks tumbled-in rather than arranged
+  const a = i * GOLDEN_ANGLE + rand01(i * 3 + 1) * 0.6;
+  const r = Math.sqrt((i % LAYER_SIZE + rand01(i * 3 + 2)) / LAYER_SIZE) * 0.34;
   return {
     x: Math.cos(a) * r,
     z: Math.sin(a) * r,
