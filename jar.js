@@ -545,11 +545,12 @@ function closeJarRead() {
 $('#jarLockForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const err = $('#jarLockError');
-  const tried = $('#jarPass').value;
+  const tried = $('#jarPass').value.trim();
   // the permanent key, or this month's secret word earned in the Love Battle
-  let ok = tried === JAR_PASSWORD;
+  // (forgiving about stray spaces / capitalisation typed on a phone)
+  let ok = tried.toLowerCase() === JAR_PASSWORD.toLowerCase();
   if (!ok && window.battleMonthPassword) {
-    try { const monthly = await window.battleMonthPassword(); ok = !!monthly && tried === monthly; } catch (_) { /* fall through */ }
+    try { const monthly = await window.battleMonthPassword(); ok = !!monthly && tried.toLowerCase() === monthly.trim().toLowerCase(); } catch (_) { /* fall through */ }
   }
   if (ok) {
     unlocked = true;

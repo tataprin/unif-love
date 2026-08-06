@@ -24,6 +24,10 @@ function monthName(key) {
   return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 }
 const label = (who) => (who === 'unif' ? 'Unif' : 'Tata');
+const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// each of us has our own password, so nobody can tap as the other
+const IDENTITY_PW = { unif: 'uniflovetata', tata: 'tataloveunif' };
 
 let MONTH = monthKey();
 let started = false;
@@ -36,7 +40,8 @@ let history = [];                // finished months, newest first
 // my own not-yet-saved taps, kept separate so realtime/reloads never lose them
 let pending = 0, inFlight = 0, sending = false, flushTimer = null;
 
-let currentWho = localStorage.getItem('jarWho') || '';
+let currentWho = localStorage.getItem('battleWho') || '';   // verified with a password
+let pendingWho = '';                                         // identity awaiting its password
 let audioCtx = null;
 
 /* ===================== sound ===================== */
@@ -69,6 +74,24 @@ async function loadMonths() {
   server.tata = cur ? cur.tata_hearts : 0;
   password = cur ? cur.password : '';
   history = rows.filter((r) => r.month !== MONTH);
+}
+
+// Make sure this month's row (and its secret word) exists from day one, so last
+// month's winner can be shown the password the moment the jars reset — even
+// before anyone has tapped. Adding 0 hearts just mints the row if it's missing.
+async function ensureCurrentMonth() {
+  if (password) return;
+  const { data, error } = await window.sb.rpc('add_hearts', { p_month: MONTH, p_author: 'unif', p_delta: 0 });
+  if (!error && data) { password = data.password; server.unif = data.unif_hearts; server.tata = data.tata_hearts; }
+}
+
+// who won the most recent month that was actually played (ignoring empty months)
+function lastWinner() {
+  const played = history.filter((r) => r.unif_hearts + r.tata_hearts > 0);   // history is newest-first
+  if (!played.length) return null;
+  const r = played[0];
+  if (r.unif_hearts === r.tata_hearts) return { who: null, month: r.month, tie: true };
+  return { who: r.unif_hearts > r.tata_hearts ? 'unif' : 'tata', month: r.month, tie: false };
 }
 
 let reloadTimer = null;
@@ -186,6 +209,10 @@ function updateMine() {
   });
 }
 
+/* The secret word is the reward for winning the PREVIOUS month: when the jars
+   reset, whoever won last month is shown this month's Memory-Jar password. The
+   ongoing battle decides who gets NEXT month's word — nobody sees a word for a
+   month they haven't already won. */
 function updateSecret() {
   const box = $('#battleSecret');
   if (!box) return;
@@ -193,24 +220,25 @@ function updateSecret() {
 
   if (!currentWho) { box.classList.add('locked'); box.textContent = 'pick who you are to join the battle 💗'; return; }
 
-  const c = counts();
-  const me = c[currentWho], opp = c[currentWho === 'unif' ? 'tata' : 'unif'];
+  const lw = lastWinner();
+  const iWonLastMonth = lw && !lw.tie && lw.who === currentWho;
 
-  if (!password || (me === 0 && opp === 0)) {
-    box.classList.add('locked');
-    box.textContent = 'tap your jar to start this month’s battle 💗';
+  if (iWonLastMonth && password) {
+    box.innerHTML = '🏆 you won ' + escapeHtml(monthName(lw.month)) + '! this month’s secret word is<br>' +
+      '<span class="secret-word">' + escapeHtml(password) + '</span><br>' +
+      '<small>type it in the Memory Jar to open it · win again this month to keep it next month 💗</small>';
     return;
   }
-  if (me > opp) {
-    box.innerHTML = 'You’re winning! 👑 this month’s secret word is<br>' +
-      '<span class="secret-word">' + password.replace(/</g, '&lt;') + '</span><br>' +
-      '<small>type it in the Memory Jar to open it 💗</small>';
-  } else if (me === opp) {
-    box.classList.add('locked');
-    box.textContent = 'it’s a tie 💗 keep tapping to earn the secret word';
+
+  box.classList.add('locked');
+  if (iWonLastMonth) {
+    box.textContent = '🏆 you won ' + monthName(lw.month) + '! your secret word appears as this month’s battle begins 💗';
+  } else if (lw && lw.tie) {
+    box.textContent = monthName(lw.month) + ' was a sweet tie 💗 win this month to earn next month’s secret word';
+  } else if (lw && lw.who) {
+    box.textContent = label(lw.who) + ' won ' + monthName(lw.month) + ' and holds this month’s secret 🤫 — win this month to unlock next month’s';
   } else {
-    box.classList.add('locked');
-    box.textContent = 'you’re behind by ' + (opp - me) + ' 💗 keep tapping to win this month’s secret word';
+    box.textContent = 'win this month’s battle to unlock next month’s secret word 💗';
   }
 }
 
@@ -231,11 +259,12 @@ function renderHistory() {
   const box = $('#battleHistory');
   if (!box) return;
   box.innerHTML = '';
-  if (!history.length) {
+  const played = history.filter((r) => r.unif_hearts + r.tata_hearts > 0);
+  if (!played.length) {
     box.appendChild(el('div', 'battle-hist-empty', 'no finished months yet — this is the very first battle 💗'));
     return;
   }
-  for (const r of history) {
+  for (const r of played) {
     const row = el('div', 'battle-hist-row');
     row.appendChild(el('div', 'battle-hist-month', monthName(r.month)));
     const right = el('div');
@@ -260,15 +289,52 @@ function render() {
 
 /* ===================== identity, buttons, startup ===================== */
 
-// the "i am" chips are shared with the Memory Jar (jar.js keeps `jarWho` in
-// localStorage and toggles the .sel state); here we just react to the choice.
-document.querySelectorAll('.battle-who .who-chip[data-who]').forEach((chip) => {
+// picking who you are needs your own password, so nobody can tap as the other.
+// once verified it's remembered on this device (localStorage `battleWho`).
+function syncBattleChips() {
+  document.querySelectorAll('.battle-who .who-chip[data-bwho]').forEach((c) => {
+    c.classList.toggle('sel', c.dataset.bwho === currentWho);
+  });
+}
+
+function openBattleLock(who) {
+  pendingWho = who;
+  $('#battleLockTitle').textContent = 'is this really ' + label(who) + '?';
+  $('#battleLockError').classList.remove('show');
+  $('#battleLockPass').value = '';
+  $('#battleLock').classList.remove('hidden');
+  setTimeout(() => $('#battleLockPass').focus(), 80);
+}
+function closeBattleLock() { $('#battleLock').classList.add('hidden'); pendingWho = ''; }
+
+document.querySelectorAll('.battle-who .who-chip[data-bwho]').forEach((chip) => {
   chip.addEventListener('click', () => {
-    currentWho = chip.dataset.who;
-    localStorage.setItem('jarWho', currentWho);
-    render();
+    const who = chip.dataset.bwho;
+    if (who === currentWho) return;      // already verified as this person
+    openBattleLock(who);
   });
 });
+
+$('#battleLockForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const err = $('#battleLockError');
+  if ($('#battleLockPass').value === IDENTITY_PW[pendingWho]) {
+    currentWho = pendingWho;
+    localStorage.setItem('battleWho', currentWho);
+    closeBattleLock();
+    syncBattleChips();
+    render();
+  } else {
+    const card = document.querySelector('#battleLock .lock-card');
+    card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake');
+    err.textContent = 'hmm, that’s not your password — try again ♥';
+    err.classList.add('show');
+    $('#battleLockPass').value = '';
+    $('#battleLockPass').focus();
+  }
+});
+$('#battleLockClose').addEventListener('click', closeBattleLock);
+$('#battleLock').addEventListener('click', (e) => { if (e.target.id === 'battleLock') closeBattleLock(); });
 
 document.querySelectorAll('#view-battle .hjar').forEach((jar) => {
   const card = jar.closest('.battle-jar-card');
@@ -291,7 +357,9 @@ setInterval(async () => {
   if (nowKey !== MONTH) {
     MONTH = nowKey;
     pending = inFlight = 0; sending = false;
+    password = '';
     await loadMonths();
+    await ensureCurrentMonth();
     render();
   } else {
     updateCountdown();
@@ -301,8 +369,10 @@ setInterval(async () => {
 async function startBattle() {
   if (started) return;
   started = true;
-  currentWho = localStorage.getItem('jarWho') || '';
+  currentWho = localStorage.getItem('battleWho') || '';
   await loadMonths();
+  await ensureCurrentMonth();
+  syncBattleChips();
   render();
   setupRealtime();
 }

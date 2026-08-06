@@ -846,7 +846,43 @@ main { flex: 1; display: flex; min-height: 0; }
 .battle-hist-empty { text-align: center; opacity: .6; font-size: 14px; padding: 10px; }
 
 @media (max-width: 560px) {
-  .battle-name { font-size: 22px; }
-  .battle-count { font-size: 26px; }
-  .hjar-crown { font-size: 24px; top: -28px; }
+  #view-battle { gap: 12px; padding: 8px 12px 28px; justify-content: flex-start; }
+
+  .battle-top { gap: 10px; }
+  .battle-countdown { font-size: 18px; }
+
+  /* roomy, balanced jars that dominate the screen on a phone */
+  .battle-jars { gap: 10px; }
+  .battle-jar-card { gap: 5px; }
+  .hjar { width: clamp(120px, 40vw, 170px); }
+  .battle-name { font-size: 23px; }
+  .battle-jar-card.mine .battle-name::after { font-size: 13px; }
+  .battle-count { font-size: 30px; }
+  .battle-tap-hint { font-size: 12.5px; }
+  .battle-vs { font-size: 26px; margin-top: 26px; }
+  .hjar-crown { font-size: 26px; top: -26px; }
+
+  /* the secret word wraps and stays tappable-readable */
+  .battle-secret { font-size: 15px; }
+  .battle-secret .secret-word { font-size: 27px; padding: 4px 18px; word-break: break-word; }
+
+  .battle-history { max-height: 40vh; }
+  .battle-hist-row { padding: 9px 13px; gap: 8px; }
+  .battle-hist-month { font-size: 19px; }
+  .battle-hist-win { font-size: 13px; }
+  .battle-hist-score { font-size: 12px; }
+
+  /* the identity lock card sits comfortably on a small screen */
+  .battle-lock .lock-card { width: min(320px, 92%); }
 }
+
+/* very narrow phones — keep the two jars side by side, just smaller */
+@media (max-width: 340px) {
+  .hjar { width: 38vw; }
+  .battle-vs { font-size: 22px; margin-top: 22px; }
+  .battle-name { font-size: 20px; }
+  .nav-btn { padding: 6px 9px; font-size: 11px; }
+}
+
+/* the "prove who you are" prompt on the Love Battle tab reuses the jar lock card */
+.battle-lock { position: fixed; z-index: 40; }

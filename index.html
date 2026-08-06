@@ -167,10 +167,21 @@
       <div class="battle-top">
         <div class="who-row battle-who">
           <span class="who-from">i am</span>
-          <button type="button" class="who-chip" data-who="unif">Unif ♥</button>
-          <button type="button" class="who-chip" data-who="tata">Tata ♥</button>
+          <button type="button" class="who-chip" data-bwho="unif">Unif ♥</button>
+          <button type="button" class="who-chip" data-bwho="tata">Tata ♥</button>
         </div>
         <div id="battleCountdown" class="battle-countdown"></div>
+      </div>
+
+      <div id="battleLock" class="jar-overlay battle-lock hidden">
+        <form id="battleLockForm" class="lock-card">
+          <button type="button" id="battleLockClose" class="jar-close">✕</button>
+          <div class="lock-emoji">🔒</div>
+          <div class="note-title" id="battleLockTitle">is this really you?</div>
+          <input id="battleLockPass" class="gate-input" type="password" autocomplete="off" placeholder="your secret password" required>
+          <button type="submit" class="pill-btn">that's me ♥</button>
+          <p id="battleLockError" class="gate-error"></p>
+        </form>
       </div>
 
       <div class="battle-jars">
