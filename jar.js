@@ -542,10 +542,16 @@ function closeJarRead() {
   lidTarget = 0;
 }
 
-$('#jarLockForm').addEventListener('submit', (e) => {
+$('#jarLockForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const err = $('#jarLockError');
-  if ($('#jarPass').value === JAR_PASSWORD) {
+  const tried = $('#jarPass').value;
+  // the permanent key, or this month's secret word earned in the Love Battle
+  let ok = tried === JAR_PASSWORD;
+  if (!ok && window.battleMonthPassword) {
+    try { const monthly = await window.battleMonthPassword(); ok = !!monthly && tried === monthly; } catch (_) { /* fall through */ }
+  }
+  if (ok) {
     unlocked = true;
     $('#jarPass').value = '';
     err.classList.remove('show');

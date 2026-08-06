@@ -722,3 +722,131 @@ main { flex: 1; display: flex; min-height: 0; }
   .jar-note-text { font-size: 18px; }
   .read-card { padding: 18px 14px 12px; }
 }
+
+/* ---------- Love Battle (the two heart jars) ---------- */
+#view-battle { align-items: center; gap: 10px; padding: 6px 12px 4px; overflow-y: auto; }
+
+.battle-top {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  width: 100%; max-width: 640px;
+}
+.battle-who { margin-top: 2px; }
+.battle-countdown {
+  font-family: var(--script); font-size: 20px; color: #9c5b70; text-align: center;
+}
+.battle-countdown b { color: var(--pink-dark); }
+
+.battle-jars {
+  display: flex; align-items: center; justify-content: center; gap: clamp(10px, 4vw, 40px);
+  width: 100%; max-width: 640px;
+}
+.battle-vs {
+  font-size: clamp(24px, 6vw, 40px); animation: beat 1.6s ease-in-out infinite;
+  align-self: center; margin-top: 30px;
+}
+
+.battle-jar-card {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  flex: 1 1 0; max-width: 220px; user-select: none;
+}
+.battle-name {
+  font-family: var(--script); font-size: 26px; color: var(--rose-deep); line-height: 1;
+}
+.battle-count {
+  font-weight: 700; font-size: 30px; color: var(--pink-dark); line-height: 1;
+  transition: transform .12s;
+}
+.battle-count.bump { transform: scale(1.28); }
+.battle-tap-hint { font-size: 12px; opacity: .65; min-height: 16px; text-align: center; }
+
+/* the tappable jar */
+.hjar {
+  position: relative; width: clamp(120px, 34vw, 180px); aspect-ratio: 3 / 4;
+  cursor: pointer; transition: transform .12s;
+}
+.battle-jar-card.mine .hjar:active { transform: scale(.95); }
+.battle-jar-card.mine .hjar {
+  filter: drop-shadow(0 10px 22px rgba(224, 80, 122, .38));
+}
+.battle-jar-card.mine .battle-name { position: relative; }
+.battle-jar-card.mine .battle-name::after {
+  content: ' (you)'; font-size: 14px; color: var(--pink); font-family: var(--font, inherit);
+}
+.battle-jar-card:not(.mine) .hjar { opacity: .92; }
+
+.hjar-lid {
+  position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  width: 58%; height: 12%; border-radius: 8px 8px 4px 4px;
+  background: linear-gradient(#e7b56f, #cf9a52);
+  box-shadow: inset 0 2px 3px rgba(255,255,255,.4);
+  z-index: 3;
+}
+.hjar-glass {
+  position: absolute; top: 11%; left: 0; width: 100%; height: 89%;
+  border-radius: 14px 14px 26px 26px;
+  border: 3px solid rgba(224, 80, 122, .28);
+  background: linear-gradient(160deg, rgba(255,255,255,.55), rgba(223,241,247,.28));
+  overflow: hidden;
+  box-shadow: inset 0 0 24px rgba(255,255,255,.5), inset -8px 0 18px rgba(178,58,96,.06);
+}
+.hjar-fill {
+  position: absolute; left: 0; bottom: 0; width: 100%; height: 0%;
+  background: linear-gradient(0deg, #ef6a92, #ffa7c2);
+  opacity: .55; transition: height .5s cubic-bezier(.22,1,.36,1);
+}
+.hjar-fill::before {
+  content: ''; position: absolute; top: -8px; left: 0; width: 100%; height: 12px;
+  background: radial-gradient(circle, rgba(255,255,255,.6) 30%, transparent 70%);
+  opacity: .5;
+}
+.hjar-hearts { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.hjar-hearts .rise {
+  position: absolute; bottom: 8%; font-size: 20px; color: #fff;
+  animation: heartRise 1s ease-out forwards;
+}
+@keyframes heartRise {
+  0%   { transform: translateY(0) scale(.6); opacity: 0; }
+  25%  { opacity: 1; }
+  100% { transform: translateY(-120px) scale(1.1); opacity: 0; }
+}
+.hjar-crown {
+  position: absolute; top: -34px; left: 50%; transform: translateX(-50%) scale(0);
+  font-size: 30px; transition: transform .3s cubic-bezier(.34,1.56,.64,1);
+}
+.hjar-crown.show { transform: translateX(-50%) scale(1); }
+
+/* the secret-word banner */
+.battle-secret {
+  width: 100%; max-width: 520px; text-align: center; min-height: 30px;
+  font-size: 15px; color: var(--rose-deep); line-height: 1.4;
+}
+.battle-secret .secret-word {
+  display: inline-block; font-family: var(--script); font-size: 30px; font-weight: 700;
+  color: #fff; background: linear-gradient(135deg, #ef6a92, var(--pink-dark));
+  padding: 4px 22px; border-radius: 999px; margin-top: 4px;
+  box-shadow: 0 8px 20px rgba(224, 80, 122, .4); letter-spacing: .02em;
+}
+.battle-secret.locked { opacity: .8; font-style: italic; }
+
+/* the winners history */
+.battle-history-wrap { width: 100%; max-width: 520px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.battle-history {
+  width: 100%; max-height: 34vh; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.battle-history.hidden { display: none; }
+.battle-hist-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: rgba(255, 255, 255, .8); border: 1.5px solid rgba(224, 80, 122, .2);
+  border-radius: 14px; padding: 10px 16px;
+}
+.battle-hist-month { font-family: var(--script); font-size: 22px; color: var(--rose-deep); }
+.battle-hist-win { font-weight: 700; color: var(--pink-dark); font-size: 14px; }
+.battle-hist-score { font-size: 12.5px; opacity: .65; }
+.battle-hist-empty { text-align: center; opacity: .6; font-size: 14px; padding: 10px; }
+
+@media (max-width: 560px) {
+  .battle-name { font-size: 22px; }
+  .battle-count { font-size: 26px; }
+  .hjar-crown { font-size: 24px; top: -28px; }
+}

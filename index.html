@@ -44,6 +44,7 @@
       <button class="nav-btn" data-view="board">Our Wall</button>
       <button class="nav-btn" data-view="surprise">✨ Surprise</button>
       <button class="nav-btn" data-view="jar">🫙 Memory Jar</button>
+      <button class="nav-btn" data-view="battle">💗 Love Battle</button>
     </nav>
   </header>
 
@@ -161,6 +162,58 @@
       </div>
       <p class="hint">our virtual memory jar · tap ✍️ to drop a little note in · opening it needs the magic word ♥</p>
     </section>
+
+    <section id="view-battle" class="view">
+      <div class="battle-top">
+        <div class="who-row battle-who">
+          <span class="who-from">i am</span>
+          <button type="button" class="who-chip" data-who="unif">Unif ♥</button>
+          <button type="button" class="who-chip" data-who="tata">Tata ♥</button>
+        </div>
+        <div id="battleCountdown" class="battle-countdown"></div>
+      </div>
+
+      <div class="battle-jars">
+        <div class="battle-jar-card" data-side="unif">
+          <div class="battle-name">Unif</div>
+          <div class="hjar">
+            <div class="hjar-lid"></div>
+            <div class="hjar-glass">
+              <div class="hjar-fill" data-fill="unif"></div>
+              <div class="hjar-hearts" data-hearts="unif"></div>
+              <div class="hjar-crown" data-crown="unif">👑</div>
+            </div>
+          </div>
+          <div class="battle-count" data-count="unif">0</div>
+          <div class="battle-tap-hint" data-taphint="unif"></div>
+        </div>
+
+        <div class="battle-vs">💗</div>
+
+        <div class="battle-jar-card" data-side="tata">
+          <div class="battle-name">Tata</div>
+          <div class="hjar">
+            <div class="hjar-lid"></div>
+            <div class="hjar-glass">
+              <div class="hjar-fill" data-fill="tata"></div>
+              <div class="hjar-hearts" data-hearts="tata"></div>
+              <div class="hjar-crown" data-crown="tata">👑</div>
+            </div>
+          </div>
+          <div class="battle-count" data-count="tata">0</div>
+          <div class="battle-tap-hint" data-taphint="tata"></div>
+        </div>
+      </div>
+
+      <div id="battleSecret" class="battle-secret"></div>
+
+      <div class="battle-history-wrap">
+        <button id="battleHistoryBtn" class="pill-btn ghost">🏆 Who won each month</button>
+        <div id="battleHistory" class="battle-history hidden"></div>
+      </div>
+
+      <p class="hint">pick who you are, then tap your jar to fill it with love · most hearts by month's end wins this month's secret word for the Memory Jar ♥</p>
+    </section>
   </main>
 
   <canvas id="fxCanvas"></canvas>
@@ -173,5 +226,6 @@
   <script src="script.js"></script>
   <script src="room.js"></script>
   <script src="jar.js"></script>
+  <script src="battle.js"></script>
 </body>
 </html>
