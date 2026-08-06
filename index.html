@@ -184,33 +184,45 @@
         </form>
       </div>
 
-      <div class="battle-jars">
-        <div class="battle-jar-card" data-side="unif">
-          <div class="battle-name">Unif</div>
-          <div class="hjar">
-            <div class="hjar-lid"></div>
-            <div class="hjar-glass">
-              <div class="hjar-fill" data-fill="unif"></div>
-              <div class="hjar-hearts" data-hearts="unif"></div>
-              <div class="hjar-crown" data-crown="unif">👑</div>
+      <div class="battle-stage" id="battleStage">
+        <canvas id="battleCanvas"></canvas>
+        <div id="battleCombo" class="battle-combo"></div>
+        <div id="battleCheer" class="battle-cheer"></div>
+
+        <!-- shown only if this device can't do 3D — the game still plays -->
+        <div class="battle-jars" id="battleFallback">
+          <div class="battle-jar-card" data-side="unif">
+            <div class="hjar">
+              <div class="hjar-lid"></div>
+              <div class="hjar-glass">
+                <div class="hjar-fill" data-fill="unif"></div>
+                <div class="hjar-hearts" data-hearts="unif"></div>
+                <div class="hjar-crown" data-crown="unif">👑</div>
+              </div>
             </div>
           </div>
+          <div class="battle-jar-card" data-side="tata">
+            <div class="hjar">
+              <div class="hjar-lid"></div>
+              <div class="hjar-glass">
+                <div class="hjar-fill" data-fill="tata"></div>
+                <div class="hjar-hearts" data-hearts="tata"></div>
+                <div class="hjar-crown" data-crown="tata">👑</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="battle-scoreboard">
+        <div class="score-side" data-side="unif">
+          <div class="battle-name">Unif</div>
           <div class="battle-count" data-count="unif">0</div>
           <div class="battle-tap-hint" data-taphint="unif"></div>
         </div>
-
         <div class="battle-vs">💗</div>
-
-        <div class="battle-jar-card" data-side="tata">
+        <div class="score-side" data-side="tata">
           <div class="battle-name">Tata</div>
-          <div class="hjar">
-            <div class="hjar-lid"></div>
-            <div class="hjar-glass">
-              <div class="hjar-fill" data-fill="tata"></div>
-              <div class="hjar-hearts" data-hearts="tata"></div>
-              <div class="hjar-crown" data-crown="tata">👑</div>
-            </div>
-          </div>
           <div class="battle-count" data-count="tata">0</div>
           <div class="battle-tap-hint" data-taphint="tata"></div>
         </div>
