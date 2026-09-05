@@ -1097,13 +1097,12 @@ body { touch-action: manipulation; }
 .book:not(.closed) .cover-open { opacity: 0; }
 
 /* PHONES IN PORTRAIT: keep BOTH pages on screen — it should still look like an
-   open book. A spread is limited by the width of the phone, so use nearly all of
-   it and let the pages run taller than usual to claim the spare height. */
+   open book. A spread is limited by the width of the phone, so each page is as
+   wide as half the screen allows, keeping its normal proportions. */
 @media (orientation: portrait) and (max-width: 900px) {
-  :root {
-    --pw: min(48.5vw, 40vh);
-    --ph: min(calc(var(--pw) * 1.95), 46vh);   /* claim the spare height; the cap keeps short phones from scrolling */
-  }
+  /* the pages keep their normal book shape (the 1.38 ratio from :root) — they are
+     simply as wide as half a phone allows; the 40vh cap keeps short screens tidy */
+  :root { --pw: min(48.5vw, 40vh); }
 
   #view-book { overflow-x: hidden; overflow-y: auto; gap: 10px; padding: 6px 4px 12px; }
   .scene { min-height: calc(var(--ph) + 12px); }
