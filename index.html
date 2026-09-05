@@ -29,11 +29,40 @@
   </div>
 
   <div id="intro">
-    <div class="intro-inner">
-      <div class="intro-heart">♥</div>
-      <h1>Unif</h1>
-      <p>I made you a little something…</p>
-      <button id="introOpen">open it ♥</button>
+    <canvas id="introCanvas"></canvas>
+    <button type="button" id="introSkip" class="intro-skip">skip ♥</button>
+
+    <div class="intro-track">
+      <section class="intro-panel">
+        <div class="intro-inner">
+          <div class="intro-heart">♥</div>
+          <h1>Unif</h1>
+          <p>I made you a little something…</p>
+        </div>
+        <div id="introCue" class="intro-cue"><span>scroll</span><i>⌄</i></div>
+      </section>
+
+      <section class="intro-panel">
+        <div class="intro-inner">
+          <h2>every picture in here</h2>
+          <p>is a day I never want to forget</p>
+        </div>
+      </section>
+
+      <section class="intro-panel">
+        <div class="intro-inner">
+          <h2>so I made you a book</h2>
+          <p>and a wall, and a jar full of little secrets</p>
+        </div>
+      </section>
+
+      <section class="intro-panel">
+        <div class="intro-inner">
+          <div class="intro-heart small">♥</div>
+          <h2>and it is all yours</h2>
+          <button id="introOpen">open it ♥</button>
+        </div>
+      </section>
     </div>
   </div>
 
@@ -249,5 +278,6 @@
   <script src="room.js"></script>
   <script src="jar.js"></script>
   <script src="battle.js"></script>
+  <script src="intro.js"></script>
 </body>
 </html>
