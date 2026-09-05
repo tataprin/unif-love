@@ -780,40 +780,6 @@ function makeBoardItem(rec) {
   return item;
 }
 
-/* tidy every picture into a neat top-to-bottom, left-to-right flow, no more overlaps */
-function sortBoard() {
-  if (!boardItems.length) return;
-  const gap = 22;
-  const bw = board.clientWidth / boardZoom;
-  let x = gap, y = gap, rowH = 0;
-
-  for (const rec of boardItems) {
-    const item = boardItemEls.get(rec.id);
-    if (!item) continue;
-    if (x > gap && x + rec.w + gap > bw) {
-      x = gap;
-      y += rowH + gap;
-      rowH = 0;
-    }
-    rec.x = x;
-    rec.y = y;
-    rec.rot = 0;
-    item.style.left = x + 'px';
-    item.style.top = y + 'px';
-    item.style.setProperty('--rot', '0deg');
-    cloudPut('board', rec);
-    x += rec.w + gap;
-    rowH = Math.max(rowH, item.offsetHeight);
-  }
-
-  // tidying wraps everything back within view width and shrinks the used height to fit —
-  // unlike normal edits, let the canvas shrink back down instead of only ever growing
-  boardCanvas.style.width = '';
-  boardCanvas.style.height = Math.max(board.clientHeight, y + rowH + CANVAS_PAD) + 'px';
-  board.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
-  toast('Tidied up ♥');
-}
-
 async function addBoardFiles(files) {
   const list = [...files].filter((f) => f.type.startsWith('image/') || f.type.startsWith('video/'));
   if (!list.length) return;
@@ -904,7 +870,6 @@ $('#addBookPhotos').addEventListener('click', () => $('#bookFile').click());
 $('#bookFile').addEventListener('change', (e) => { addBookFiles(e.target.files); e.target.value = ''; });
 $('#addBoardPhotos').addEventListener('click', () => $('#boardFile').click());
 $('#boardFile').addEventListener('change', (e) => { addBoardFiles(e.target.files); e.target.value = ''; });
-$('#sortBoard').addEventListener('click', sortBoard);
 
 /* ===================== wall mode & zoom ===================== */
 
