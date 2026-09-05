@@ -1058,6 +1058,14 @@ body { touch-action: manipulation; }
   user-select: none; -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
+/* ...but captions are contenteditable, and user-select:none stops iOS putting a
+   caret in them, which made "Edit book" look broken. Text stays selectable. */
+.page-caption, .scene [contenteditable="true"] {
+  user-select: text; -webkit-user-select: text;
+}
+/* while editing, dragging a photo repositions it — that gesture belongs to us,
+   not to the browser's scrolling */
+#view-book.editing .photo-frame { touch-action: none; }
 
 /* where you are in the book */
 .book-progress {
@@ -1088,35 +1096,23 @@ body { touch-action: manipulation; }
 @keyframes cover-breathe { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
 .book:not(.closed) .cover-open { opacity: 0; }
 
-/* PHONES IN PORTRAIT: show one big page instead of a tiny two-page spread.
-   The book already slides half a page sideways when it is closed — keeping that
-   shift for every page centres whichever page you are reading, so the page can
-   be nearly the full width of the screen instead of half of it. */
+/* PHONES IN PORTRAIT: keep BOTH pages on screen — it should still look like an
+   open book. A spread is limited by the width of the phone, so use nearly all of
+   it and let the pages run taller than usual to claim the spare height. */
 @media (orientation: portrait) and (max-width: 900px) {
-  :root { --pw: min(88vw, 54vh); }
-
-  #view-book { overflow-x: hidden; overflow-y: auto; gap: 12px; padding: 6px 8px 14px; }
-  .scene { min-height: calc(var(--ph) + 14px); }
-
-  .book,
-  .book.closed   { transform: rotateX(4deg) translateX(calc(var(--pw) / -2)); }
-  .book.finished { transform: rotateX(4deg) translateX(calc(var(--pw) /  2)); }
-
-  .book-shadow { width: calc(var(--pw) * 1.02); height: 26px; bottom: -4px; }
-
-  /* the facing page peeks in at the edge — fade it away so the page looks like
-     it curves into the spine instead of ending in a hard stripe of photo */
-  .scene::before, .scene::after {
-    content: ''; position: absolute; top: 0; bottom: 0; width: 30px; z-index: 6;
-    pointer-events: none;
+  :root {
+    --pw: min(48.5vw, 40vh);
+    --ph: min(calc(var(--pw) * 1.95), 46vh);   /* claim the spare height; the cap keeps short phones from scrolling */
   }
-  .scene::before { left: 0;  background: linear-gradient(to right, #ffeaf1 18%, rgba(255, 234, 241, 0)); }
-  .scene::after  { right: 0; background: linear-gradient(to left,  #ffeaf1 18%, rgba(255, 234, 241, 0)); }
+
+  #view-book { overflow-x: hidden; overflow-y: auto; gap: 10px; padding: 6px 4px 12px; }
+  .scene { min-height: calc(var(--ph) + 12px); }
+  .book-shadow { width: calc(var(--pw) * 1.75); height: 24px; bottom: -4px; }
 
   /* bigger, easier targets for turning pages */
-  .round-btn { width: 54px; height: 54px; font-size: 30px; }
+  .round-btn { width: 52px; height: 52px; font-size: 28px; }
   .book-controls { gap: 10px; }
-  .cover-open { margin-top: 18px; font-size: 13px; }
+  .cover-open { margin-top: 10px; font-size: 11px; letter-spacing: .14em; }
 }
 
 /* phones on their side: a spread fits again, so use the extra height */
