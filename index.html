@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>Unif ♥</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>❤️</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -83,13 +83,17 @@
         <div class="book-shadow"></div>
         <div class="book closed" id="book"></div>
       </div>
+      <div class="book-progress">
+        <div class="book-bar"><span id="bookFill"></span></div>
+        <div id="bookCounter" class="book-counter">the cover</div>
+      </div>
       <div class="book-controls">
         <button id="prevBtn" class="round-btn" aria-label="Previous page">‹</button>
         <button id="bookModeBtn" class="pill-btn ghost">✏️ Edit book</button>
         <button id="addBookPhotos" class="pill-btn edit-only">+ Add photos &amp; videos</button>
         <button id="nextBtn" class="round-btn" aria-label="Next page">›</button>
       </div>
-      <p class="hint">flip with the arrows or a swipe · tap ✏️ Edit book to reframe photos, write captions or add more</p>
+      <p class="hint">swipe, or tap the left and right edges, to turn the page · tap ✏️ Edit book to reframe photos, write captions or add more</p>
     </section>
 
     <section id="view-board" class="view">

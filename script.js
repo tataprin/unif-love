@@ -254,6 +254,7 @@ function pageNode(def, side) {
       '<div class="cover-inner">' +
       '<div class="cover-name">Tata &amp; Unif</div>' +
       '<div class="cover-heart">♥</div>' +
+      '<div class="cover-open">tap to open</div>' +
       '</div>';
 
   } else if (def.type === 'backcover') {
@@ -479,6 +480,19 @@ function applyFlips() {
   bookEl.querySelectorAll('.page.live').forEach((p) => p.classList.remove('live'));
   if (sheetEls[flipCount]) sheetEls[flipCount].children[0].classList.add('live');
   if (flipCount > 0) sheetEls[flipCount - 1].children[1].classList.add('live');
+
+  updateBookProgress();
+}
+
+/* a quiet "you are here" under the book, so it never feels endless */
+function updateBookProgress() {
+  const N = sheetEls.length;
+  const fill = $('#bookFill'), label = $('#bookCounter');
+  if (!fill || !label) return;
+  fill.style.width = (N ? (flipCount / N) * 100 : 0) + '%';
+  if (flipCount === 0) label.textContent = 'the cover — tap to open ♥';
+  else if (N > 0 && flipCount === N) label.textContent = 'the end ♥';
+  else label.textContent = flipCount + ' / ' + N;
 }
 
 /* Keep a turning sheet above everything while it moves. */
@@ -836,6 +850,15 @@ function makeDropZone(zone, handler) {
 }
 makeDropZone($('#view-book'), addBookFiles);
 makeDropZone(board, addBoardFiles);
+
+/* The site behaves like an app, so the page itself must not zoom: a stray pinch
+   while swiping the book, or a double-tap on a photo, used to leave everything
+   scaled and crooked. Safari on iOS ignores user-scalable=no, so its pinch
+   gestures are cancelled here instead. The wall's own pinch-to-zoom is
+   unaffected — that one is built from touch events, not browser zoom. */
+for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
+  document.addEventListener(type, (e) => e.preventDefault(), { passive: false });
+}
 
 /* ===================== nav / intro / hearts ===================== */
 

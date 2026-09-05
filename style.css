@@ -1042,3 +1042,87 @@ main { flex: 1; display: flex; min-height: 0; }
 
 /* the "prove who you are" prompt on the Love Battle tab reuses the jar lock card */
 .battle-lock { position: fixed; z-index: 40; }
+
+/* ---------- the book, made bigger and easier to turn ---------- */
+
+/* an app, not a document: no double-tap zoom anywhere */
+body { touch-action: manipulation; }
+
+/* pages turn a touch quicker, and never fight the finger that's turning them */
+.sheet {
+  transition: transform .95s cubic-bezier(.32, .06, .2, 1);
+  will-change: transform;
+}
+.scene {
+  touch-action: pan-y;                 /* vertical scroll yes; sideways drag is ours */
+  user-select: none; -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* where you are in the book */
+.book-progress {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  width: min(320px, 82vw);
+}
+.book-bar {
+  width: 100%; height: 5px; border-radius: 999px;
+  background: rgba(224, 80, 122, .18); overflow: hidden;
+}
+#bookFill {
+  display: block; height: 100%; width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ef6a92, var(--pink-dark));
+  transition: width .5s cubic-bezier(.22, 1, .36, 1);
+}
+.book-counter {
+  font-size: 12.5px; font-weight: 600; letter-spacing: .06em;
+  color: var(--pink-dark); opacity: .75;
+}
+
+/* the closed cover says what to do with it */
+.cover-open {
+  margin-top: 14px; font-size: 12px; letter-spacing: .18em; text-transform: uppercase;
+  color: rgba(255, 235, 220, .85);
+  animation: cover-breathe 2.4s ease-in-out infinite;
+}
+@keyframes cover-breathe { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
+.book:not(.closed) .cover-open { opacity: 0; }
+
+/* PHONES IN PORTRAIT: show one big page instead of a tiny two-page spread.
+   The book already slides half a page sideways when it is closed — keeping that
+   shift for every page centres whichever page you are reading, so the page can
+   be nearly the full width of the screen instead of half of it. */
+@media (orientation: portrait) and (max-width: 900px) {
+  :root { --pw: min(88vw, 54vh); }
+
+  #view-book { overflow-x: hidden; overflow-y: auto; gap: 12px; padding: 6px 8px 14px; }
+  .scene { min-height: calc(var(--ph) + 14px); }
+
+  .book,
+  .book.closed   { transform: rotateX(4deg) translateX(calc(var(--pw) / -2)); }
+  .book.finished { transform: rotateX(4deg) translateX(calc(var(--pw) /  2)); }
+
+  .book-shadow { width: calc(var(--pw) * 1.02); height: 26px; bottom: -4px; }
+
+  /* the facing page peeks in at the edge — fade it away so the page looks like
+     it curves into the spine instead of ending in a hard stripe of photo */
+  .scene::before, .scene::after {
+    content: ''; position: absolute; top: 0; bottom: 0; width: 30px; z-index: 6;
+    pointer-events: none;
+  }
+  .scene::before { left: 0;  background: linear-gradient(to right, #ffeaf1 18%, rgba(255, 234, 241, 0)); }
+  .scene::after  { right: 0; background: linear-gradient(to left,  #ffeaf1 18%, rgba(255, 234, 241, 0)); }
+
+  /* bigger, easier targets for turning pages */
+  .round-btn { width: 54px; height: 54px; font-size: 30px; }
+  .book-controls { gap: 10px; }
+  .cover-open { margin-top: 18px; font-size: 13px; }
+}
+
+/* phones on their side: a spread fits again, so use the extra height */
+@media (orientation: landscape) and (max-height: 560px) {
+  :root { --pw: min(44vw, 66vh); }
+  #view-book { gap: 8px; padding: 4px 10px 8px; }
+  .book-progress { width: min(280px, 50vw); }
+  #view-book .hint { display: none; }     /* screen is short — the book wins */
+}
